@@ -45,12 +45,17 @@ public sealed class AppDbContext : DbContext
                 .HasColumnName("job_id")
                 .HasDefaultValueSql("gen_random_uuid()");
 
-            // Status stored as string so migrations aren't needed when enum values are added
+            // Status stored as string so migrations aren't needed when enum values are added.
+            // IsConcurrencyToken() enforces optimistic concurrency:
+            // EF Core includes Status in the WHERE clause of UPDATE statements.
+            // If two devices try to release the same job simultaneously, only one UPDATE
+            // will find Status='Paid' — the other will get DbUpdateConcurrencyException.
             e.Property(x => x.Status)
                 .HasColumnName("status")
                 .HasConversion<string>()
                 .HasMaxLength(32)
-                .IsRequired();
+                .IsRequired()
+                .IsConcurrencyToken();
 
             e.Property(x => x.ObjectKey).HasColumnName("object_key").HasMaxLength(512);
             e.Property(x => x.Sha256).HasColumnName("sha256").HasMaxLength(64);

@@ -101,14 +101,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("WebOrigin");
 
-// Apply device auth middleware only to /api/v1/device/* routes
-app.MapWhen(
+// Apply device auth middleware only to /api/v1/device/* routes.
+// UseWhen (not MapWhen) — branches conditionally then REJOINS the main pipeline
+// so MapControllers() is still reached after auth passes.
+app.UseWhen(
     ctx => ctx.Request.Path.StartsWithSegments("/api/v1/device"),
     deviceApp => deviceApp.UseMiddleware<DeviceAuthMiddleware>()
 );
 
-// Apply admin auth middleware only to /api/v1/admin/* routes
-app.MapWhen(
+// Apply admin auth middleware only to /api/v1/admin/* routes.
+app.UseWhen(
     ctx => ctx.Request.Path.StartsWithSegments("/api/v1/admin"),
     adminApp => adminApp.UseMiddleware<AdminAuthMiddleware>()
 );

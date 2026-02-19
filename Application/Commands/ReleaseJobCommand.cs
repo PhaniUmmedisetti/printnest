@@ -116,10 +116,6 @@ public sealed class ReleaseJobCommand
             throw new DomainException(ErrorCodes.OtpInvalid, "Invalid code.", httpStatus: 400);
         }
 
-        // ── Per-job attempt tracking ───────────────────────────────
-        job.OtpAttempts++;
-        job.OtpLastAttemptUtc = DateTime.UtcNow;
-
         // ── Assign device + store ─────────────────────────────────
         job.AssignedDeviceId = input.DeviceId;
         job.AssignedStoreId = input.StoreId;
