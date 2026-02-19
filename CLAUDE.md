@@ -82,6 +82,9 @@ Printing → Failed             (device: CUPS failure)
 Completed → Deleted           (worker: MinIO delete succeeded)
 Failed → Deleted              (worker: MinIO delete succeeded)
 Expired → Deleted             (worker: MinIO delete succeeded)
+Draft → Expired               (worker: abandoned before upload, 24h)
+Uploaded → Expired            (worker: uploaded but never paid, 24h)
+Quoted → Expired              (worker: quoted but never paid, 24h)
 Paid → Expired                (worker: 7-day lifetime exceeded)
 Released → Expired            (worker: stuck > 10 min)
 Downloading → Failed          (worker: stuck > 10 min watchdog)
@@ -155,12 +158,13 @@ Signature = HMACSHA256(SharedSecret, `{timestamp}\n{METHOD}\n{path}\n{bodyHash}`
 
 ## Key Business Rules
 
-1. **OTP**: 6-digit numeric, Argon2id hashed, 6h expiry, single-use, max 6 attempts/job
+1. **OTP**: 6-digit numeric, Argon2id hashed, 6h expiry, single-use, rate-limited 6 attempts/min/device
 2. **File token**: JWT HS256, 120s TTL, device-bound, single-use (JTI in UsedFileTokens table)
 3. **Double-release prevention**: EF Core optimistic concurrency on Status column
-4. **File deletion**: Cleanup worker handles it. If MinIO fails → DeletePending=true → retry
-5. **Stuck jobs**: ExpiryWorker moves Downloading/Printing > 10 min to Failed
-6. **OTP never logged**: Search codebase for "OtpHash" — never appears in any log call
+4. **File deletion**: Cleanup worker handles it. If MinIO fails → retry next run (status check guards safety)
+5. **Stuck jobs**: ExpiryWorker watchdog — Released > 10 min → Expired; Downloading/Printing > 10 min → Failed
+6. **Abandoned jobs**: Draft/Uploaded/Quoted older than 24h → Expired (files in MinIO are then deleted)
+7. **OTP never logged**: Search codebase for "OtpHash" — never appears in any log call
 
 ---
 
@@ -186,6 +190,22 @@ docker-compose up
 # API: http://localhost:5000
 # MinIO console: http://localhost:9001
 # Swagger: http://localhost:5000/swagger
+```
+
+---
+
+## Testing the Full Flow
+
+**Public + Admin endpoints** → open `printnest.http` in VS Code (REST Client extension)
+
+**Device flow** (requires HMAC signing — use the simulator):
+```bash
+# 1. Register a device (run once)
+ADMIN_API_KEY=your-key bash tools/provision-device.sh dev_store1_01 store_id
+
+# 2. Run public flow (Steps 3–8 in printnest.http) to get an OTP, then:
+bash tools/simulate-device.sh dev_store1_01 "<base64-secret>" <otp-code>
+# Downloads file to /tmp/printnest-<jobId>.pdf and runs full flow to Completed
 ```
 
 ---
