@@ -1,0 +1,42 @@
+# .NET build outputs
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# dotnet publish
+publish/
+out/
+
+# Rider / VS / VSCode
+.idea/
+*.DotSettings.user
+.vscode/
+
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+coverage/
+
+# Local claude settings
+.claude/
