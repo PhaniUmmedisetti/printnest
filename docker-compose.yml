@@ -1,0 +1,104 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────
+# PrintNest — Local Development Stack
+#
+# Usage:
+#   cp infra/.env.example infra/.env   # fill in values first
+#   docker-compose up
+#
+# Services:
+#   postgres  → localhost:5432
+#   minio     → localhost:9000 (API), localhost:9001 (console)
+#   api       → localhost:5000
+# ─────────────────────────────────────────────────────────
+
+services:
+
+  # ── Postgres ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-printnest}
+      POSTGRES_USER: ${POSTGRES_USER:-printnest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-printnest}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO ─────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console → http://localhost:9001
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── MinIO bucket init ─────────────────────────────────────
+  # Creates the printfiles bucket on first run, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD} &&
+        mc mb --ignore-existing local/${MINIO_BUCKET:-printfiles} &&
+        echo 'Bucket ready.'
+      "
+
+  # ── PrintNest API ─────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "5000:8080"
+    environment:
+      # Postgres
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-printnest};Username=${POSTGRES_USER:-printnest};Password=${POSTGRES_PASSWORD}"
+      # JWT
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__FileTokenTtlSeconds: ${JWT_FILE_TOKEN_TTL_SECONDS:-120}
+      # Admin
+      AdminApiKey: ${ADMIN_API_KEY}
+      # Storage (MinIO)
+      Storage__Endpoint: ${STORAGE_ENDPOINT:-http://minio:9000}
+      Storage__AccessKey: ${MINIO_ROOT_USER:-minioadmin}
+      Storage__SecretKey: ${MINIO_ROOT_PASSWORD}
+      Storage__BucketName: ${MINIO_BUCKET:-printfiles}
+      Storage__UseHttps: ${STORAGE_USE_HTTPS:-false}
+      # CORS
+      Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # ASP.NET
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+
+volumes:
+  postgres_data:
+  minio_data:

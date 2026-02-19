@@ -4,11 +4,37 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PrintNest</RootNamespace>
+    <AssemblyName>PrintNest</AssemblyName>
+    <!-- Treat nullable warnings as errors to enforce null safety throughout -->
+    <WarningsAsErrors>nullable</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- API / Web -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+
+    <!-- EF Core + Postgres -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+
+    <!-- MinIO / S3 compatible storage -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.305.18" />
+
+    <!-- JWT token generation and validation -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
+
+    <!-- OTP hashing: Argon2id -->
+    <PackageReference Include="Isopoh.Cryptography.Argon2" Version="2.0.0" />
+
+    <!-- Input validation -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+
+    <!-- Background workers -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
