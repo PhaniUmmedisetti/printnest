@@ -11,7 +11,7 @@ namespace PrintNest.Infrastructure.Workers;
 /// <summary>
 /// Background worker that automatically expires and fails stuck jobs.
 ///
-/// Runs every 60 seconds. Handles three cases:
+/// Runs every 60 seconds. Handles four cases:
 ///
 /// 1. EXPIRY: Paid jobs older than 7 days → Expired
 ///    (User paid but never came to the store within the job lifetime)
@@ -21,6 +21,9 @@ namespace PrintNest.Infrastructure.Workers;
 ///
 /// 3. STUCK IN DOWNLOADING/PRINTING: Jobs in these states > 10 min → Failed
 ///    (Device started but never finished — printer crash, network loss, etc.)
+///
+/// 4. ABANDONED PRE-PAYMENT: Draft/Uploaded/Quoted jobs older than 24h → Expired
+///    (User abandoned after upload but before paying — file must not stay in MinIO forever)
 ///
 /// All transitions are atomic per-job. One failure does not stop the batch.
 /// </summary>
@@ -32,6 +35,7 @@ public sealed class ExpiryWorker : BackgroundService
     private static readonly TimeSpan RunInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan JobLifetime = TimeSpan.FromDays(7);
     private static readonly TimeSpan StuckJobTimeout = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan PrePaymentAbandonTimeout = TimeSpan.FromHours(24);
 
     public ExpiryWorker(IServiceScopeFactory scopeFactory, ILogger<ExpiryWorker> logger)
     {
@@ -68,6 +72,7 @@ public sealed class ExpiryWorker : BackgroundService
         var now = DateTime.UtcNow;
         var jobLifetimeCutoff = now - JobLifetime;
         var stuckCutoff = now - StuckJobTimeout;
+        var abandonCutoff = now - PrePaymentAbandonTimeout;
 
         // ── 1. Expire old Paid jobs (7 day job lifetime) ──────────
         var expiredPaidJobs = await db.PrintJobs
@@ -147,7 +152,39 @@ public sealed class ExpiryWorker : BackgroundService
             }
         }
 
-        var totalProcessed = expiredPaidJobs.Count + stuckReleasedJobs.Count + stuckActiveJobs.Count;
+        // ── 4. Expire abandoned pre-payment jobs (24h with no activity) ─
+        // Draft: created but file never uploaded. Uploaded: file in MinIO but never quoted.
+        // Quoted: quoted but user never paid. All have files (or presigned URLs) that need cleanup.
+        var abandonedPrePaymentJobs = await db.PrintJobs
+            .Where(j =>
+                (j.Status == JobStatus.Draft ||
+                 j.Status == JobStatus.Uploaded ||
+                 j.Status == JobStatus.Quoted) &&
+                j.CreatedAtUtc < abandonCutoff)
+            .ToListAsync(ct);
+
+        foreach (var job in abandonedPrePaymentJobs)
+        {
+            try
+            {
+                JobStateMachine.Transition(job, JobStatus.Expired, actor: "worker");
+                db.AuditEvents.Add(new Domain.Entities.AuditEvent
+                {
+                    JobId = job.JobId,
+                    Type = AuditEventType.JobExpired,
+                    MetaJson = $"{{\"reason\":\"abandoned_pre_payment\",\"stuckInStatus\":\"{job.Status}\"}}",
+                    CreatedAtUtc = now
+                });
+                _logger.LogInformation("[ExpiryWorker] Job {JobId} expired (abandoned in {Status} after 24h).",
+                    job.JobId, job.Status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[ExpiryWorker] Could not expire abandoned job {JobId}.", job.JobId);
+            }
+        }
+
+        var totalProcessed = expiredPaidJobs.Count + stuckReleasedJobs.Count + stuckActiveJobs.Count + abandonedPrePaymentJobs.Count;
         if (totalProcessed > 0)
         {
             await db.SaveChangesAsync(ct);

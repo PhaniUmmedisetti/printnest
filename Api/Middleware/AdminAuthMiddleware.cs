@@ -44,7 +44,10 @@ public sealed class AdminAuthMiddleware
 
         var providedKeyBytes = Encoding.UTF8.GetBytes(providedKey);
 
-        // Constant-time compare — prevents timing attacks even on wrong-length keys
+        // Constant-time compare — prevents timing attacks when both keys are the same length.
+        // FixedTimeEquals returns false immediately for different-length inputs (by design in .NET),
+        // meaning an attacker can infer the key byte-length via timing. This is acceptable here:
+        // the key has ≥32 chars of entropy and the admin endpoint must not be on a public network.
         if (!CryptographicOperations.FixedTimeEquals(_expectedKeyBytes, providedKeyBytes))
             throw new DomainException(ErrorCodes.AdminUnauthorized, "Unauthorized.", httpStatus: 401);
 

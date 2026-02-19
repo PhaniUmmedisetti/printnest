@@ -78,11 +78,15 @@ public sealed class ReleaseJobCommand
         // ── Rate limit: per device per minute ─────────────────────
         // Count recent release attempts from this device in the last 60 seconds
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        // Use a field-anchored JSON substring match to avoid false matches.
+        // e.g. dev_abc must not match inside dev_abc123. The pattern
+        // "deviceId":"dev_abc" is unique within our serialized JSON format.
+        var deviceIdJsonFragment = $"\"deviceId\":\"{input.DeviceId}\"";
         var recentAttempts = await _db.AuditEvents
             .CountAsync(e =>
                 e.Type == AuditEventType.OtpAttemptFailed &&
                 e.CreatedAtUtc > oneMinuteAgo &&
-                e.MetaJson != null && e.MetaJson.Contains(input.DeviceId));
+                e.MetaJson != null && e.MetaJson.Contains(deviceIdJsonFragment));
 
         if (recentAttempts >= MaxAttemptsPerMinutePerDevice)
             throw new DomainException(ErrorCodes.OtpRateLimited, "Invalid code.", httpStatus: 429);

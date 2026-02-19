@@ -64,14 +64,9 @@ public sealed class DeviceController : ControllerBase
         if (req.StoreId is not null) device.StoreId = req.StoreId;
         if (req.CapabilitiesJson is not null) device.CapabilitiesJson = req.CapabilitiesJson;
 
-        _db.AuditEvents.Add(new AuditEvent
-        {
-            JobId = Guid.Empty, // heartbeat is not job-specific
-            Type = Domain.Enums.AuditEventType.DeviceHeartbeat,
-            MetaJson = $"{{\"deviceId\":\"{device.DeviceId}\"}}",
-            CreatedAtUtc = DateTime.UtcNow
-        });
-
+        // LastHeartbeatUtc on the Device entity already records device liveness.
+        // No AuditEvent row — heartbeats are routine telemetry, not security-relevant events.
+        // Auditing every heartbeat would add ~28,000 rows/day per 10 devices (one per 30s).
         await _db.SaveChangesAsync();
 
         return Ok(new { serverTimeUtc = DateTime.UtcNow });
@@ -147,6 +142,9 @@ public sealed class DeviceController : ControllerBase
 
         if (job.AssignedDeviceId != device.DeviceId)
             throw new DomainException(ErrorCodes.DeviceUnauthorized, "Job not assigned to this device.", httpStatus: 403);
+
+        if (job.Status != Domain.Enums.JobStatus.Released)
+            throw new DomainException(ErrorCodes.JobStateInvalid, "Job is no longer in a downloadable state.", httpStatus: 409);
 
         // ── Consume JTI + transition to Downloading (atomic) ─────
         _db.UsedFileTokens.Add(new UsedFileToken

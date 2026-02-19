@@ -47,6 +47,9 @@ public static class JobStateMachine
         (JobStatus.Printing,     JobStatus.Failed),      // device: CUPS reported failure
 
         // ── Background worker only ────────────────────────────────
+        (JobStatus.Draft,        JobStatus.Expired),     // worker: abandoned before upload (24h)
+        (JobStatus.Uploaded,     JobStatus.Expired),     // worker: uploaded but never quoted/paid (24h)
+        (JobStatus.Quoted,       JobStatus.Expired),     // worker: quoted but never paid (24h)
         (JobStatus.Paid,         JobStatus.Expired),     // worker: 7-day job lifetime exceeded
         (JobStatus.Released,     JobStatus.Expired),     // worker: stuck in Released (device never downloaded)
         (JobStatus.Downloading,  JobStatus.Failed),      // worker: stuck in Downloading > 10 min
@@ -163,6 +166,13 @@ public static class JobStateMachine
                 job.OtpHash = null;
                 job.OtpExpiryUtc = null;
                 job.OtpAttempts = 0;
+                job.OtpLockedUntilUtc = null;
+                break;
+
+            case JobStatus.Expired:
+                // Clear OTP fields — expired jobs can never be released
+                job.OtpHash = null;
+                job.OtpExpiryUtc = null;
                 job.OtpLockedUntilUtc = null;
                 break;
 

@@ -68,14 +68,16 @@ public sealed class CleanupWorker : BackgroundService
 
         // ── 1. Delete files for terminal jobs ─────────────────────
         // Include jobs with DeletePending = true (previous delete failed)
+        // Only fetch terminal jobs that still have a file — the status check is the
+        // authoritative guard. DeletePending is a retry hint but NOT a selection criterion
+        // on its own: if it were ever set on a non-terminal job it would cause data loss.
         var jobsToDelete = await db.PrintJobs
             .Where(j =>
                 j.DeletedAtUtc == null &&
                 j.ObjectKey != null &&
                 (j.Status == JobStatus.Completed ||
                  j.Status == JobStatus.Failed ||
-                 j.Status == JobStatus.Expired ||
-                 j.DeletePending))
+                 j.Status == JobStatus.Expired))
             .ToListAsync(ct);
 
         foreach (var job in jobsToDelete)
