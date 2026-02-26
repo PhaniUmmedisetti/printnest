@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# PrintNest — Device Simulator
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# PrintNest â€” Device Simulator
 #
 # Simulates the complete Raspberry Pi device workflow without hardware:
-#   1. Heartbeat        — verifies HMAC auth is working
-#   2. OTP Release      — enters OTP, gets job details + file token
-#   3. File Download    — downloads PDF from MinIO via the file token
-#   4. Printing Started — reports CUPS job submitted
-#   5. Completed        — reports print success
+#   1. Heartbeat        â€” verifies HMAC auth is working
+#   2. OTP Release      â€” enters OTP, gets job details + file token
+#   3. File Download    â€” downloads PDF from MinIO via the file token
+#   4. Printing Started â€” reports CUPS job submitted
+#   5. Completed        â€” reports print success
 #
 # Usage:
 #   ./simulate-device.sh <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE> [API_URL]
 #
-# Example (after running Steps 1–8 in printnest.http):
+# Example (after running Steps 1â€“8 in printnest.http):
 #   ./simulate-device.sh dev_supermart_01 "abc123base64==" 482917
 #
 # Environment variables:
-#   STORE_ID    (optional) — sent with release and heartbeat
-#   OUTPUT_DIR  (optional) — where to save the downloaded PDF, default /tmp
+#   STORE_ID    (optional) â€” sent with release and heartbeat
+#   OUTPUT_DIR  (optional) â€” where to save the downloaded PDF, default /tmp
 #
 # Requirements: curl, jq, openssl, xxd
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 set -euo pipefail
 
-# ── Args ──────────────────────────────────────────────────────────────────────
+# â”€â”€ Args â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 DEVICE_ID="${1:?Usage: $0 <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE> [API_URL]}"
 DEVICE_SECRET="${2:?Usage: $0 <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE> [API_URL]}"
 OTP="${3:?Usage: $0 <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE> [API_URL]}"
@@ -33,10 +33,10 @@ API_URL="${4:-http://localhost:5000}"
 STORE_ID="${STORE_ID:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp}"
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-step() { echo ""; echo "── $* ──────────────────────────────────────────────────"; }
-ok()   { echo "  ✓ $*"; }
-fail() { echo "  ✗ $*" >&2; exit 1; }
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+step() { echo ""; echo "â”€â”€ $* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€"; }
+ok()   { echo "  âœ“ $*"; }
+fail() { echo "  âœ— $*" >&2; exit 1; }
 
 # Compute HMAC-SHA256 device auth headers.
 # Args:   METHOD PATH [BODY]
@@ -99,7 +99,7 @@ device_call() {
     curl "${curl_args[@]}" "$API_URL$path"
 }
 
-# ── Preflight checks ──────────────────────────────────────────────────────────
+# â”€â”€ Preflight checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 for cmd in curl jq openssl xxd; do
     command -v "$cmd" &>/dev/null || fail "Required tool not found: $cmd. Install with: apt install $cmd"
 done
@@ -111,7 +111,7 @@ echo "  Device:   $DEVICE_ID"
 echo "  Store:    ${STORE_ID:-not specified}"
 echo "  OTP:      $OTP"
 
-# ── Step 1: Heartbeat ─────────────────────────────────────────────────────────
+# â”€â”€ Step 1: Heartbeat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 step "Step 1: Heartbeat (auth check)"
 
 if [ -n "$STORE_ID" ]; then
@@ -129,7 +129,7 @@ fi
 SERVER_TIME=$(echo "$HB_RESPONSE" | jq -r '.serverTimeUtc')
 ok "HMAC auth verified. Server time: $SERVER_TIME"
 
-# ── Step 2: OTP Release ───────────────────────────────────────────────────────
+# â”€â”€ Step 2: OTP Release â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 step "Step 2: OTP Release"
 
 if [ -n "$STORE_ID" ]; then
@@ -153,10 +153,10 @@ COLOR=$(echo "$RELEASE_RESPONSE" | jq -r '.jobSummary.color')
 PRICE_CENTS=$(echo "$RELEASE_RESPONSE" | jq -r '.jobSummary.priceCents')
 
 ok "Job released: $JOB_ID"
-ok "Print job: $COPIES copies, $COLOR, ₹$(echo "scale=2; $PRICE_CENTS/100" | bc 2>/dev/null || echo "$PRICE_CENTS cents")"
+ok "Print job: $COPIES copies, $COLOR, â‚¹$(echo "scale=2; $PRICE_CENTS/100" | bc 2>/dev/null || echo "$PRICE_CENTS cents")"
 ok "File token valid for: ${TOKEN_TTL}s (use it quickly)"
 
-# ── Step 3: Download file ─────────────────────────────────────────────────────
+# â”€â”€ Step 3: Download file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 step "Step 3: File Download"
 
 DOWNLOAD_PATH="/api/v1/device/printjobs/${JOB_ID}/file"
@@ -185,7 +185,7 @@ fi
 FILE_SIZE=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
 ok "File saved: $OUTPUT_FILE ($FILE_SIZE bytes)"
 
-# ── Step 4: Printing started ──────────────────────────────────────────────────
+# â”€â”€ Step 4: Printing started â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 step "Step 4: Mark Printing Started"
 
 CUPS_JOB_ID="sim-$(date +%s)"
@@ -198,7 +198,7 @@ fi
 
 ok "Status: $(echo "$PRINTING_RESPONSE" | jq -r '.status')"
 
-# ── Step 5: Completed ─────────────────────────────────────────────────────────
+# â”€â”€ Step 5: Completed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 step "Step 5: Mark Completed"
 
 COMPLETE_BODY=$(printf '{"cupsJobId":"%s"}' "$CUPS_JOB_ID")
@@ -210,13 +210,13 @@ fi
 
 ok "Status: $(echo "$COMPLETE_RESPONSE" | jq -r '.status')"
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  ✓ Full device flow complete"
+echo "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”"
+echo "  âœ“ Full device flow complete"
 echo "  Job:  $JOB_ID"
 echo "  File: $OUTPUT_FILE"
 echo ""
 echo "  The job is now Completed. CleanupWorker will delete the file"
 echo "  from MinIO within the next 60 seconds."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”"

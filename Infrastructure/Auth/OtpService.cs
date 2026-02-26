@@ -53,6 +53,8 @@ public sealed class OtpService : IOtpService
 
     private static string HashOtp(string plaintext)
     {
+        // Argon2 encoded hashes must include a salt and hash bytes.
+        // Without a salt, the encoded output can degrade to params-only text and never verify.
         var config = new Argon2Config
         {
             Type = Argon2Type.HybridAddressing, // Argon2id
@@ -62,6 +64,7 @@ public sealed class OtpService : IOtpService
             Lanes = Parallelism,
             Threads = Parallelism,
             Password = System.Text.Encoding.UTF8.GetBytes(plaintext),
+            Salt = RandomNumberGenerator.GetBytes(16),
             HashLength = HashLength
         };
 

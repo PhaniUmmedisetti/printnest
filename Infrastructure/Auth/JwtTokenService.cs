@@ -88,12 +88,14 @@ public sealed class JwtTokenService : ITokenService
             var principal = _handler.ValidateToken(token, validationParams, out _);
 
             var jobIdStr = principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? principal.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new DomainException(ErrorCodes.TokenInvalid, "Token is missing job ID.", 401);
 
             var deviceId = principal.FindFirstValue(ClaimDeviceId)
                 ?? throw new DomainException(ErrorCodes.TokenInvalid, "Token is missing device ID.", 401);
 
             var jti = principal.FindFirstValue(JwtRegisteredClaimNames.Jti)
+                ?? principal.FindFirstValue(ClaimTypes.SerialNumber)
                 ?? throw new DomainException(ErrorCodes.TokenInvalid, "Token is missing JTI.", 401);
 
             if (!Guid.TryParse(jobIdStr, out var jobId))

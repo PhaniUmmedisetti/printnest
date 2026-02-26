@@ -1,37 +1,36 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# PrintNest API — REST Client Test File
-# Requires: VS Code extension "REST Client" (ms-vscode.vscode-restclient)
+﻿# PrintNest API test flow (run top to bottom)
+# Requires VS Code REST Client extension.
 #
-# FULL FLOW (run steps in order):
-#   1. Admin:  create store → register device
-#   2. Public: create job → upload file → finalize → quote → pay → generate OTP
-#   3. Device: use tools/simulate-device.sh (HMAC signing needed, see bottom)
-#
-# QUICK START:
-#   1. docker-compose up
-#   2. Set @adminKey below
-#   3. Run steps 1a → 1b → 2 → 3 → 4 (see Step 4 note) → 5 → 6 → 7 → 8
-#   4. Copy jobId and sharedSecret from responses into the @variables
-#   5. Run tools/simulate-device.sh for the device side
-# ─────────────────────────────────────────────────────────────────────────────
+# Auth model:
+# - Admin APIs: X-Admin-Key
+# - Device APIs: HMAC headers (use tools/simulate-device.sh)
+# - No login JWT endpoint exists
+# - File JWT is issued by POST /api/v1/device/release after OTP validation
 
-@baseUrl  = http://localhost:5000
+@baseUrl = http://localhost:5000
+@adminKey = k21vCRggYgJNsxRPEAbRJlO92j4kWEVhwjAJI7qYQiPPpKb6
 
-# ── Set these before running ──────────────────────────────────────────────────
-@adminKey = replace_with_your_32_char_admin_key
+@storeId = store_supermart_01
+@deviceId = dev_supermart_abc12345
+@samplePdfPath = C:/Users/phani/Downloads/Pavan Kumar Madapathi BA - Resume.pdf
 
-# ── Copy from API responses after running steps below ────────────────────────
-@storeId   = store_supermart_01
-@deviceId  = dev_supermart_abc12345
-@jobId     = paste-job-id-here
+# Fill these after Step 4 / Step 6 / Step 11:
+@sharedSecret = paste-shared-secret-from-step-4
+@jobId = a6be1e5f-9386-4a4b-8bfd-a5bf13cede00
+@uploadUrl = http://localhost:9000/printfiles/jobs/a6be1e5f-9386-4a4b-8bfd-a5bf13cede00.pdf?AWSAccessKeyId=minioadmin&Expires=1772142633&Signature=SpB%2FSPbtax9gHfs3kSiQH9uDJ%2FA%3D
+@otp = paste-otp-from-step-11
 
 ###
+# Step 0: Health check
+GET {{baseUrl}}/health
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ADMIN: Stores
-# ═════════════════════════════════════════════════════════════════════════════
+###
+# Step 1: Admin auth sanity check
+GET {{baseUrl}}/api/v1/admin/stores
+X-Admin-Key: {{adminKey}}
 
-### Step 1a: Create a store
+###
+# Step 2: Create store (first run -> 200, later runs may return 409 if already exists)
 POST {{baseUrl}}/api/v1/admin/stores
 Content-Type: application/json
 X-Admin-Key: {{adminKey}}
@@ -45,20 +44,13 @@ X-Admin-Key: {{adminKey}}
 }
 
 ###
-
-### Step 1b: List all stores (verify creation)
+# Step 3: List stores
 GET {{baseUrl}}/api/v1/admin/stores
 X-Admin-Key: {{adminKey}}
 
 ###
-
-# ═════════════════════════════════════════════════════════════════════════════
-# ADMIN: Devices
-# ═════════════════════════════════════════════════════════════════════════════
-
-### Step 2: Register a device
-# ⚠ IMPORTANT: Copy sharedSecret from the response immediately — it is NEVER shown again.
-# Paste it into simulate-device.sh when testing the device flow.
+# Step 4: Register device (copy sharedSecret from response into @sharedSecret)
+# If device already exists, use Step 5 and your previous sharedSecret.
 POST {{baseUrl}}/api/v1/admin/devices
 Content-Type: application/json
 X-Admin-Key: {{adminKey}}
@@ -69,57 +61,45 @@ X-Admin-Key: {{adminKey}}
 }
 
 ###
-
-### List all devices (verify registration)
+# Step 5: List devices
 GET {{baseUrl}}/api/v1/admin/devices
 X-Admin-Key: {{adminKey}}
 
 ###
-
-### Deactivate a device (blocks it from auth)
-# PATCH {{baseUrl}}/api/v1/admin/devices/{{deviceId}}/deactivate
-# X-Admin-Key: {{adminKey}}
-
-###
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PUBLIC: Job Lifecycle
-# ═════════════════════════════════════════════════════════════════════════════
-
-### Step 3: Create a print job
-# Response contains: jobId + upload.url (presigned MinIO PUT URL, 15-min TTL)
-# Copy jobId into @jobId above. Use upload.url in Step 4.
+# Step 6: Create print job (copy jobId + upload.url)
 POST {{baseUrl}}/api/v1/public/printjobs
 Content-Type: application/json
 
-{}
+{
+  "fileName": "demo.pdf",
+  "fileSizeBytes": 1024,
+  "contentType": "application/pdf"
+}
 
 ###
-
-### Step 4: Upload file to MinIO
-# The uploadUrl from Step 3 is a presigned PUT URL pointing directly to MinIO.
-# Replace the URL below with the uploadUrl from the Step 3 response.
-# You can use any small PDF file — or create one:
-#   printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n153\n%%%%EOF' > /tmp/test.pdf
-#
-# PUT <paste-presigned-upload-url-here>
-# Content-Type: application/pdf
-#
-# < /tmp/test.pdf
+# Step 6 note:
+# From Step 6 response, copy:
+# - jobId -> @jobId
+# - upload.url -> @uploadUrl
+# IMPORTANT for local host:
+#   replace "https://minio:9000" with "http://localhost:9000" in @uploadUrl
 
 ###
+# Step 7: Upload PDF to MinIO (expect 200 + empty body)
+PUT {{uploadUrl}}
+Content-Type: application/pdf
 
-### Step 5: Finalize upload (confirms file is in MinIO, transitions Draft → Uploaded)
-# sha256 is optional — send {} to skip hash verification, or provide the hex SHA256 of your file.
+< {{samplePdfPath}}
+
+###
+# Step 8: Finalize upload (expect {"status":"Uploaded"})
 POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/finalize
 Content-Type: application/json
 
 {}
 
 ###
-
-### Step 6: Get a price quote (sets options, transitions Uploaded → Quoted)
-# color must be "BW" — "Color" is coming soon (disabled)
+# Step 9: Quote (expect status Quoted, minimum 500 paise)
 POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/quote
 Content-Type: application/json
 
@@ -129,76 +109,40 @@ Content-Type: application/json
 }
 
 ###
-
-### Step 7: Mock payment (transitions Quoted → Paid)
+# Step 10: Mock payment (expect status Paid)
 POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/pay-mock
 Content-Type: application/json
 
 {}
 
 ###
-
-### Step 8: Generate OTP (returns 6-digit code — show this to user)
-# Can be called multiple times — each call invalidates the previous OTP.
-# OTP expires in 6 hours.
+# Step 11: Generate OTP (copy otp into @otp)
 POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/otp/generate
 Content-Type: application/json
 
 {}
 
 ###
-
-### Regenerate OTP (if user wants a fresh code)
-# Same endpoint — calling it again generates a new OTP and invalidates the old one.
-# POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/otp/generate
-# Content-Type: application/json
-#
-# {}
-
-###
-
-### Check job status at any point
+# Step 12: Check job status
 GET {{baseUrl}}/api/v1/public/printjobs/{{jobId}}
 
 ###
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PUBLIC: Store Map
-# ═════════════════════════════════════════════════════════════════════════════
-
-### Get all active stores (used by customer map view — no auth required)
+# Step 13: Public stores endpoint (no auth)
 GET {{baseUrl}}/api/v1/public/stores
 
 ###
-
-# ═════════════════════════════════════════════════════════════════════════════
-# DEVICE FLOW — Use tools/simulate-device.sh
-# ═════════════════════════════════════════════════════════════════════════════
+# Step 14: Run device flow using simulator (PowerShell -> WSL/Git-Bash)
+# STORE_ID=store_supermart_01 bash tools/simulate-device.sh dev_supermart_abc12345 "<sharedSecret>" "<otp>" http://localhost:5000
 #
-# Device endpoints require HMAC-SHA256 signing which cannot be computed inline
-# in a .http file. Use the device simulator script:
-#
-#   bash tools/simulate-device.sh <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE>
-#
-# Example (after Steps 1–8 above):
-#   bash tools/simulate-device.sh dev_supermart_abc12345 "base64secret==" 482917
-#
-# The simulator runs the full device flow:
-#   POST /api/v1/device/heartbeat          ← verifies device auth works
-#   POST /api/v1/device/release            ← OTP → file token
-#   GET  /api/v1/device/printjobs/{id}/file ← download PDF to /tmp/
-#   POST /api/v1/device/printjobs/{id}/printing-started
-#   POST /api/v1/device/printjobs/{id}/completed
-#
-# ═════════════════════════════════════════════════════════════════════════════
+# Expected simulator flow:
+# - heartbeat ok
+# - release ok
+# - file download ok
+# - printing-started ok
+# - completed ok
 
 ###
+# Optional: deactivate device
+# PATCH {{baseUrl}}/api/v1/admin/devices/{{deviceId}}/deactivate
+# X-Admin-Key: {{adminKey}}
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SYSTEM
-# ═════════════════════════════════════════════════════════════════════════════
-
-### Health check
-GET {{baseUrl}}/health
-
-###

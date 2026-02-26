@@ -1,4 +1,4 @@
-# PrintNest — Complete AI Handoff Document
+﻿# PrintNest â€” Complete AI Handoff Document
 
 This document captures every decision, every line of logic, every business rule, and every
 implementation detail of the PrintNest backend. Any AI coding assistant reading this should
@@ -6,7 +6,7 @@ be able to pick up the project in full fidelity without reading any other file f
 
 ---
 
-## !! AI ASSISTANT — READ THIS FIRST !!
+## !! AI ASSISTANT â€” READ THIS FIRST !!
 
 ### Session Bookmark Protocol
 
@@ -19,15 +19,15 @@ be able to pick up the project in full fidelity without reading any other file f
 > "stop", "bookmark this", "that's it for today", "calling it a day",
 > "save progress", "end session", "pause here", "note this down"
 
-→ Immediately update the `## CURRENT BOOKMARK` section at the bottom of this file with:
+â†’ Immediately update the `## CURRENT BOOKMARK` section at the bottom of this file with:
 - **Date** (today's date)
-- **Completed this session** — bullet list of everything finished
-- **Stopped at** — the exact task/file/step where work paused (be specific: file name, function, test name, etc.)
-- **Next step** — the single next action to take when resuming
-- **Pending decisions** — anything the user needs to decide before work can continue
-- **Context notes** — any non-obvious state (e.g. "migration not yet run", "env var missing", "test failing for known reason")
+- **Completed this session** â€” bullet list of everything finished
+- **Stopped at** â€” the exact task/file/step where work paused (be specific: file name, function, test name, etc.)
+- **Next step** â€” the single next action to take when resuming
+- **Pending decisions** â€” anything the user needs to decide before work can continue
+- **Context notes** â€” any non-obvious state (e.g. "migration not yet run", "env var missing", "test failing for known reason")
 
-Update the bookmark section in-place — overwrite the previous bookmark. Only the latest matters.
+Update the bookmark section in-place â€” overwrite the previous bookmark. Only the latest matters.
 
 ---
 
@@ -39,18 +39,18 @@ Update the bookmark section in-place — overwrite the previous bookmark. Only t
 1. Customer opens the PrintNest mobile app
 2. Selects a nearby store on a map (OpenStreetMap, stores fetched from API)
 3. Uploads a PDF (max 20MB)
-4. Configures options: copies (1–100), color (currently B&W only; Color = "Coming Soon" / disabled)
-5. Receives a mock price: ₹2 per copy, minimum ₹5
-6. Completes mock payment (real payment is a future phase — currently a no-op)
-7. Taps "Generate OTP" → receives a 6-digit numeric code, valid for 6 hours
+4. Configures options: copies (1â€“100), color (currently B&W only; Color = "Coming Soon" / disabled)
+5. Receives a mock price: â‚¹2 per copy, minimum â‚¹5
+6. Completes mock payment (real payment is a future phase â€” currently a no-op)
+7. Taps "Generate OTP" â†’ receives a 6-digit numeric code, valid for 6 hours
 8. Walks to the store kiosk (Raspberry Pi 4 + 7" touchscreen + USB printer)
 9. Types the 6-digit OTP on the kiosk
 10. Kiosk downloads the file, submits it to CUPS for printing
 11. File is permanently deleted from storage once printing is confirmed
 
 **Core privacy guarantee:** The file only exists in MinIO storage between upload and the moment
-the cleanup worker runs after printing. After Completed → Deleted, the file is gone forever.
-The API server never stores the file on disk — all file transit is streamed directly.
+the cleanup worker runs after printing. After Completed â†’ Deleted, the file is gone forever.
+The API server never stores the file on disk â€” all file transit is streamed directly.
 
 **The system is live only in India (INR currency). MVP targets store locations in Hyderabad.**
 
@@ -71,76 +71,76 @@ The API server never stores the file on disk — all file transit is streamed di
 
 ---
 
-## 3. Architecture — Single Project, Layered by Folder
+## 3. Architecture â€” Single Project, Layered by Folder
 
 The entire backend is **one .csproj** (`printnest.csproj`). No microservices, no separate class libraries.
 Layers are enforced by folder convention, not by project references.
 
 ```
-Domain/           ← Pure business rules. Zero dependencies on other layers.
-  Entities/       ← PrintJob, Device, Store, AuditEvent, UsedFileToken
-  Enums/          ← JobStatus, AuditEventType
-  StateMachine/   ← JobStateMachine.cs — THE ONLY place status changes happen
-  Errors/         ← DomainException, ErrorCodes
+Domain/           â† Pure business rules. Zero dependencies on other layers.
+  Entities/       â† PrintJob, Device, Store, AuditEvent, UsedFileToken
+  Enums/          â† JobStatus, AuditEventType
+  StateMachine/   â† JobStateMachine.cs â€” THE ONLY place status changes happen
+  Errors/         â† DomainException, ErrorCodes
 
-Application/      ← Use cases. Depends on Domain + Infrastructure interfaces only.
-  Commands/       ← One sealed class per use case
-  Interfaces/     ← IStorageService, ITokenService, IDeviceAuthService, IOtpService, IAuditService
+Application/      â† Use cases. Depends on Domain + Infrastructure interfaces only.
+  Commands/       â† One sealed class per use case
+  Interfaces/     â† IStorageService, ITokenService, IDeviceAuthService, IOtpService, IAuditService
 
-Infrastructure/   ← Concrete external system wrappers.
-  Persistence/    ← AppDbContext (EF Core), AuditService
-  Auth/           ← HmacDeviceAuthService, JwtTokenService, OtpService
-  Storage/        ← MinioStorageService
-  Workers/        ← ExpiryWorker, CleanupWorker (IHostedService)
+Infrastructure/   â† Concrete external system wrappers.
+  Persistence/    â† AppDbContext (EF Core), AuditService
+  Auth/           â† HmacDeviceAuthService, JwtTokenService, OtpService
+  Storage/        â† MinioStorageService
+  Workers/        â† ExpiryWorker, CleanupWorker (IHostedService)
 
-Api/              ← HTTP boundary. Thin controllers, middleware only.
+Api/              â† HTTP boundary. Thin controllers, middleware only.
   Controllers/
-    Public/       ← Customer endpoints (no auth)
-    Device/       ← Device endpoints (HMAC auth via DeviceAuthMiddleware)
-    Admin/        ← Admin endpoints (X-Admin-Key via AdminAuthMiddleware)
-  Middleware/     ← ErrorHandlingMiddleware, DeviceAuthMiddleware, AdminAuthMiddleware
+    Public/       â† Customer endpoints (no auth)
+    Device/       â† Device endpoints (HMAC auth via DeviceAuthMiddleware)
+    Admin/        â† Admin endpoints (X-Admin-Key via AdminAuthMiddleware)
+  Middleware/     â† ErrorHandlingMiddleware, DeviceAuthMiddleware, AdminAuthMiddleware
 
-tools/            ← Bash scripts for operators
-  provision-device.sh   ← Registers a Pi with the API, writes .env
-  simulate-device.sh    ← Simulates full Pi device flow for testing
+tools/            â† Bash scripts for operators
+  provision-device.sh   â† Registers a Pi with the API, writes .env
+  simulate-device.sh    â† Simulates full Pi device flow for testing
 
-Program.cs        ← DI registration, middleware pipeline, startup migration
+Program.cs        â† DI registration, middleware pipeline, startup migration
 docker-compose.yml
-Dockerfile        ← Multi-stage build → non-root aspnet:8.0 runtime
+Dockerfile        â† Multi-stage build â†’ non-root aspnet:8.0 runtime
 infra/.env.example
-printnest.http    ← VS Code REST Client test file (all public + admin flows)
-CLAUDE.md         ← AI context file (always read this first)
+printnest.http    â† VS Code REST Client test file (all public + admin flows)
+CLAUDE.md         â† AI context file (always read this first)
 ```
 
 ---
 
-## 4. Domain Entities — Every Field
+## 4. Domain Entities â€” Every Field
 
 ### PrintJob
 ```csharp
 Guid     JobId            // PK, gen_random_uuid() default
-JobStatus Status          // IsConcurrencyToken() — EF includes this in UPDATE WHERE clause
-string?  ObjectKey        // "jobs/{jobId}.pdf" — set at CreateJob time, never changes
+JobStatus Status          // IsConcurrencyToken() â€” EF includes this in UPDATE WHERE clause
+string?  ObjectKey        // "jobs/{jobId}.pdf" â€” set at CreateJob time, never changes
 string?  Sha256           // SHA256 hex of the uploaded file (set at FinalizeUpload)
-string?  OptionsJson      // JSONB: {"copies":2,"color":"BW"} — set at Quote
-int      PriceCents       // calculated at Quote (copies × 200, min 500)
+string?  OptionsJson      // JSONB: {"copies":2,"color":"BW"} â€” set at Quote
+int      PriceCents       // calculated at Quote (copies Ã— 200, min 500)
 string   Currency         // always "INR"
 
-// OTP fields — NEVER logged, NEVER returned in API responses
-string?  OtpHash          // Argon2id hash — nulled when Released or Expired
-DateTime? OtpExpiryUtc   // 6h from generation — nulled when Released or Expired
+// OTP fields â€” NEVER logged, NEVER returned in API responses
+string?  OtpHash          // Argon2id hash â€” nulled when Released or Expired
+DateTime? OtpExpiryUtc   // 6h from generation â€” nulled when Released or Expired
 int      OtpAttempts      // always 0 in MVP (per-job locking not yet active)
 DateTime? OtpLastAttemptUtc
 DateTime? OtpLockedUntilUtc  // reserved for future per-job locking feature
 
-// Assignment — set atomically at Release
+// Assignment â€” set atomically at Release
 string?  AssignedDeviceId  // device that claimed this job via OTP
 string?  AssignedStoreId   // store where printing happens
 DateTime? ReleaseLockUtc  // when the OTP was consumed
 
 // Lifecycle
-DateTime? PrintedAtUtc    // set when Printing → Completed
-DateTime? DeletedAtUtc    // set when any terminal → Deleted
+DateTime? PrintedAtUtc    // set when Printing â†’ Completed
+DateTime? DeletedAtUtc    // set when any terminal â†’ Deleted
 bool     DeletePending    // true if MinIO delete failed, retry next CleanupWorker run
 
 DateTime CreatedAtUtc
@@ -151,7 +151,7 @@ DateTime UpdatedAtUtc
 ```csharp
 string   DeviceId         // PK, format: "dev_{anything}" enforced by validation
 string?  StoreId          // which store this Pi lives at
-string   SharedSecret     // plaintext base64 (32 raw bytes) — stored plaintext for HMAC
+string   SharedSecret     // plaintext base64 (32 raw bytes) â€” stored plaintext for HMAC
 DateTime? LastHeartbeatUtc
 string?  CapabilitiesJson // JSONB: Pi can report printer capabilities
 bool     IsActive         // false = device rejected by auth middleware
@@ -173,16 +173,16 @@ DateTime UpdatedAtUtc
 
 ### AuditEvent (append-only log)
 ```csharp
-long            Id          // bigserial — bigint auto-increment
+long            Id          // bigserial â€” bigint auto-increment
 Guid            JobId       // Guid.Empty for device/admin events not tied to a job
 AuditEventType  Type        // stored as string
-string?         MetaJson    // JSONB — arbitrary context, never contains OTP/secret
+string?         MetaJson    // JSONB â€” arbitrary context, never contains OTP/secret
 DateTime        CreatedAtUtc
 ```
 
 ### UsedFileToken (single-use JTI tracking)
 ```csharp
-string   Jti         // PK — compact GUID without dashes (Guid.NewGuid().ToString("N"))
+string   Jti         // PK â€” compact GUID without dashes (Guid.NewGuid().ToString("N"))
 Guid     JobId
 string   DeviceId
 DateTime UsedAtUtc
@@ -193,22 +193,22 @@ DateTime UsedAtUtc
 ## 5. Job Status Enum
 
 ```
-Draft       — job created, presigned upload URL issued, file not yet in MinIO
-Uploaded    — file confirmed in MinIO, options not yet set
-Quoted      — options set, price calculated, awaiting payment
-Paid        — mock payment complete, OTP can now be generated
-Released    — OTP validated by device, file token issued, device identified
-Downloading — device is downloading the file (file token consumed)
-Printing    — CUPS job submitted, printing in progress
-Completed   — CUPS reports success
-Failed      — CUPS reports failure, or watchdog timeout
-Expired     — job timed out (see transition table)
-Deleted     — file deleted from MinIO (terminal state, never changes again)
+Draft       â€” job created, presigned upload URL issued, file not yet in MinIO
+Uploaded    â€” file confirmed in MinIO, options not yet set
+Quoted      â€” options set, price calculated, awaiting payment
+Paid        â€” mock payment complete, OTP can now be generated
+Released    â€” OTP validated by device, file token issued, device identified
+Downloading â€” device is downloading the file (file token consumed)
+Printing    â€” CUPS job submitted, printing in progress
+Completed   â€” CUPS reports success
+Failed      â€” CUPS reports failure, or watchdog timeout
+Expired     â€” job timed out (see transition table)
+Deleted     â€” file deleted from MinIO (terminal state, never changes again)
 ```
 
 ---
 
-## 6. The State Machine — Most Critical File
+## 6. The State Machine â€” Most Critical File
 
 **File:** `Domain/StateMachine/JobStateMachine.cs`
 
@@ -223,42 +223,42 @@ If the transition is not in `AllowedTransitions`, it throws `DomainException(Job
 ### Complete Allowed Transitions Table
 
 ```
-Draft     → Uploaded      actor: "user"   — FinalizeUploadCommand, after MinIO verify
-Uploaded  → Quoted        actor: "user"   — QuoteJobCommand
-Quoted    → Paid          actor: "user"   — PayJobCommand (mock)
-Paid      → Released      actor: "device" — ReleaseJobCommand (OTP match)
-Released  → Downloading   actor: "device" — MarkDownloadingCommand (auto, on file request)
-Downloading → Printing    actor: "device" — MarkPrintingCommand
-Printing  → Completed     actor: "device" — CompleteJobCommand
-Printing  → Failed        actor: "device" — FailJobCommand
+Draft     â†’ Uploaded      actor: "user"   â€” FinalizeUploadCommand, after MinIO verify
+Uploaded  â†’ Quoted        actor: "user"   â€” QuoteJobCommand
+Quoted    â†’ Paid          actor: "user"   â€” PayJobCommand (mock)
+Paid      â†’ Released      actor: "device" â€” ReleaseJobCommand (OTP match)
+Released  â†’ Downloading   actor: "device" â€” MarkDownloadingCommand (auto, on file request)
+Downloading â†’ Printing    actor: "device" â€” MarkPrintingCommand
+Printing  â†’ Completed     actor: "device" â€” CompleteJobCommand
+Printing  â†’ Failed        actor: "device" â€” FailJobCommand
 
-Completed → Deleted       actor: "worker" — CleanupWorker (file deleted from MinIO)
-Failed    → Deleted       actor: "worker" — CleanupWorker
-Expired   → Deleted       actor: "worker" — CleanupWorker
+Completed â†’ Deleted       actor: "worker" â€” CleanupWorker (file deleted from MinIO)
+Failed    â†’ Deleted       actor: "worker" â€” CleanupWorker
+Expired   â†’ Deleted       actor: "worker" â€” CleanupWorker
 
-Draft     → Expired       actor: "worker" — ExpiryWorker (24h abandonment)
-Uploaded  → Expired       actor: "worker" — ExpiryWorker (24h abandonment)
-Quoted    → Expired       actor: "worker" — ExpiryWorker (24h abandonment)
-Paid      → Expired       actor: "worker" — ExpiryWorker (7-day job lifetime)
-Released  → Expired       actor: "worker" — ExpiryWorker (stuck > 10 min, no download)
-Downloading → Failed      actor: "worker" — ExpiryWorker watchdog (stuck > 10 min)
-Printing  → Failed        actor: "worker" — ExpiryWorker watchdog (stuck > 10 min)
+Draft     â†’ Expired       actor: "worker" â€” ExpiryWorker (24h abandonment)
+Uploaded  â†’ Expired       actor: "worker" â€” ExpiryWorker (24h abandonment)
+Quoted    â†’ Expired       actor: "worker" â€” ExpiryWorker (24h abandonment)
+Paid      â†’ Expired       actor: "worker" â€” ExpiryWorker (7-day job lifetime)
+Released  â†’ Expired       actor: "worker" â€” ExpiryWorker (stuck > 10 min, no download)
+Downloading â†’ Failed      actor: "worker" â€” ExpiryWorker watchdog (stuck > 10 min)
+Printing  â†’ Failed        actor: "worker" â€” ExpiryWorker watchdog (stuck > 10 min)
 ```
 
 ### ApplyGuards (pre-transition validation)
-- → Released: job.OtpHash must not be null; OtpExpiryUtc must be in future; OtpLockedUntilUtc must be null or past
-- → Uploaded: job.ObjectKey must not be empty
-- → Quoted: job.OptionsJson must not be empty
+- â†’ Released: job.OtpHash must not be null; OtpExpiryUtc must be in future; OtpLockedUntilUtc must be null or past
+- â†’ Uploaded: job.ObjectKey must not be empty
+- â†’ Quoted: job.OptionsJson must not be empty
 
 ### ApplyEffects (auto-set fields on transition)
-- → Released: set ReleaseLockUtc = now; null OtpHash, OtpExpiryUtc, OtpAttempts, OtpLockedUntilUtc
-- → Expired: null OtpHash, OtpExpiryUtc, OtpLockedUntilUtc (privacy cleanup)
-- → Completed: set PrintedAtUtc = now
-- → Deleted: set DeletedAtUtc = now
+- â†’ Released: set ReleaseLockUtc = now; null OtpHash, OtpExpiryUtc, OtpAttempts, OtpLockedUntilUtc
+- â†’ Expired: null OtpHash, OtpExpiryUtc, OtpLockedUntilUtc (privacy cleanup)
+- â†’ Completed: set PrintedAtUtc = now
+- â†’ Deleted: set DeletedAtUtc = now
 
 ---
 
-## 7. API Endpoints — Complete Specification
+## 7. API Endpoints â€” Complete Specification
 
 ### Error Format (always, no exceptions)
 ```json
@@ -266,9 +266,9 @@ Printing  → Failed        actor: "worker" — ExpiryWorker watchdog (stuck > 1
 ```
 All error codes are constants in `Domain/Errors/ErrorCodes.cs`. Never inline new code strings.
 
-### Public Endpoints — `/api/v1/public/` — No Auth
+### Public Endpoints â€” `/api/v1/public/` â€” No Auth
 
-#### POST /api/v1/public/printjobs — Create Job
+#### POST /api/v1/public/printjobs â€” Create Job
 Request:
 ```json
 { "fileName": "document.pdf", "fileSizeBytes": 204800, "contentType": "application/pdf" }
@@ -285,13 +285,13 @@ Response:
   }
 }
 ```
-- Validates contentType = "application/pdf", fileSizeBytes 1–20971520 (20MB)
+- Validates contentType = "application/pdf", fileSizeBytes 1â€“20971520 (20MB)
 - ObjectKey pre-computed: `jobs/{jobId}.pdf`
 - Presigned PUT URL issued by MinIO SDK with 15 minute TTL
 - MinIO enforces Content-Type: application/pdf on the PUT request
 - Job created in Draft state
 
-#### POST /api/v1/public/printjobs/{jobId}/finalize — Confirm Upload
+#### POST /api/v1/public/printjobs/{jobId}/finalize â€” Confirm Upload
 Request:
 ```json
 { "sha256": "optional-hex-hash" }
@@ -299,9 +299,9 @@ Request:
 Response: `{ "status": "Uploaded" }`
 - Calls MinIO HeadObject to verify the file actually exists
 - Stores sha256 if provided
-- Transitions Draft → Uploaded
+- Transitions Draft â†’ Uploaded
 
-#### POST /api/v1/public/printjobs/{jobId}/quote — Set Options + Get Price
+#### POST /api/v1/public/printjobs/{jobId}/quote â€” Set Options + Get Price
 Request:
 ```json
 { "copies": 2, "color": "BW" }
@@ -310,32 +310,32 @@ Response:
 ```json
 { "status": "Quoted", "pricing": { "currency": "INR", "totalAmountCents": 400 } }
 ```
-- Valid copies: 1–100
+- Valid copies: 1â€“100
 - Valid color: "BW" only (Color rejected with validation error: "Color printing is coming soon")
-- Price formula: copies × 200 paise, minimum 500 paise (₹5)
+- Price formula: copies Ã— 200 paise, minimum 500 paise (â‚¹5)
 - Stores OptionsJson as JSONB: `{"copies":2,"color":"BW"}`
-- Transitions Uploaded → Quoted
+- Transitions Uploaded â†’ Quoted
 
-#### POST /api/v1/public/printjobs/{jobId}/pay-mock — Mock Payment
+#### POST /api/v1/public/printjobs/{jobId}/pay-mock â€” Mock Payment
 Request: `{}`
 Response: `{ "status": "Paid", "priceCents": 400, "currency": "INR" }`
-- No real payment logic — MVP placeholder
-- Transitions Quoted → Paid
+- No real payment logic â€” MVP placeholder
+- Transitions Quoted â†’ Paid
 
-#### POST /api/v1/public/printjobs/{jobId}/otp/generate — Generate OTP
+#### POST /api/v1/public/printjobs/{jobId}/otp/generate â€” Generate OTP
 Request: `{}`
 Response:
 ```json
 { "otp": "482917", "expiresAtUtc": "2026-02-26T14:00:00Z" }
 ```
 - Generates cryptographically secure 6-digit code: `RandomNumberGenerator.GetInt32(100000, 1000000)`
-- Range 100000–999999 (always 6 digits, no leading zeros)
+- Range 100000â€“999999 (always 6 digits, no leading zeros)
 - Hashes with Argon2id (64MB memory, 3 iterations, parallelism 1, 32-byte hash)
 - OTP valid for 6 hours from generation
 - Calling this again generates a new OTP and invalidates the previous one (OtpAttempts reset to 0)
-- Job must be in Paid state (does NOT transition state — stays Paid)
+- Job must be in Paid state (does NOT transition state â€” stays Paid)
 
-#### GET /api/v1/public/printjobs/{jobId} — Status Check
+#### GET /api/v1/public/printjobs/{jobId} â€” Status Check
 Response:
 ```json
 {
@@ -352,15 +352,15 @@ Response:
 - Never returns: OtpHash, ObjectKey, AssignedDeviceId, Sha256
 - Safe to poll; no side effects
 
-#### GET /api/v1/public/stores — Active Stores for Map
+#### GET /api/v1/public/stores â€” Active Stores for Map
 Response: `[{ "storeId", "name", "address", "latitude", "longitude" }]`
-- Only active stores (IsActive = true) — filter is server-side; `isActive` is NOT in the response
-- Projection is explicit (5 fields only) — the full Store entity is never returned on this endpoint
+- Only active stores (IsActive = true) â€” filter is server-side; `isActive` is NOT in the response
+- Projection is explicit (5 fields only) â€” the full Store entity is never returned on this endpoint
 - Used by customer app to render the map and let user select a store
 
 ---
 
-### Device Endpoints — `/api/v1/device/` — HMAC Auth
+### Device Endpoints â€” `/api/v1/device/` â€” HMAC Auth
 
 **Every request must include:**
 ```
@@ -376,20 +376,20 @@ bodyHash = lowercase hex SHA256 of raw body bytes
 emptyBodyHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 signature = HMACSHA256(base64decode(SharedSecret), UTF8(message))
 ```
-- Timestamp drift > 300 seconds → rejected
+- Timestamp drift > 300 seconds â†’ rejected
 - All auth failures return the same 401 (never reveals which check failed)
 - `DeviceAuthMiddleware` calls `Request.EnableBuffering()`, reads body bytes, rewinds stream,
   then sets `HttpContext.Items["AuthenticatedDevice"] = device`
 
-#### POST /api/v1/device/heartbeat — Device Alive Signal
+#### POST /api/v1/device/heartbeat â€” Device Alive Signal
 Request: `{ "storeId": "store_supermart_01", "capabilitiesJson": "{...}" }`
 Response: `{ "serverTimeUtc": "..." }`
 - Updates `LastHeartbeatUtc` and `UpdatedAtUtc` on the Device entity
 - If `storeId` or `capabilitiesJson` are non-null, updates them
-- No AuditEvent generated (would create 28,000 rows/day per 10 devices — removed by design)
+- No AuditEvent generated (would create 28,000 rows/day per 10 devices â€” removed by design)
 - Admin "IsOnline" check: `LastHeartbeatUtc > DateTime.UtcNow.AddMinutes(-2)`
 
-#### POST /api/v1/device/release — OTP Validation → Job Release
+#### POST /api/v1/device/release â€” OTP Validation â†’ Job Release
 Request: `{ "otp": "482917", "storeId": "store_supermart_01" }`
 Response:
 ```json
@@ -402,25 +402,25 @@ Response:
 ```
 
 **Full ReleaseJobCommand logic (most security-critical):**
-1. Rate limit: count `OtpAttemptFailed` events with `"deviceId":"this_device"` in last 60s. If ≥6 → 429
+1. Rate limit: count `OtpAttemptFailed` events with `"deviceId":"this_device"` in last 60s. If â‰¥6 â†’ 429
 2. Load all Paid jobs where `OtpHash != null AND OtpExpiryUtc > now AND (OtpLockedUntilUtc IS NULL OR < now)`
-3. Iterate candidates: `_otp.Verify(plaintext, storedHash)` — Argon2id, ~100–300ms each
-4. If no match → RecordAsync(Guid.Empty, OtpAttemptFailed, {deviceId, reason}) → SaveChanges → throw 400 "Invalid code."
+3. Iterate candidates: `_otp.Verify(plaintext, storedHash)` â€” Argon2id, ~100â€“300ms each
+4. If no match â†’ RecordAsync(Guid.Empty, OtpAttemptFailed, {deviceId, reason}) â†’ SaveChanges â†’ throw 400 "Invalid code."
 5. If match:
    - `job.AssignedDeviceId = input.DeviceId`
    - `job.AssignedStoreId = input.StoreId`
-   - `JobStateMachine.Transition(job, Released)` — this nulls OtpHash/OtpExpiryUtc via ApplyEffects
-   - `_token.IssueFileToken(job.JobId, deviceId)` — 120s JWT
+   - `JobStateMachine.Transition(job, Released)` â€” this nulls OtpHash/OtpExpiryUtc via ApplyEffects
+   - `_token.IssueFileToken(job.JobId, deviceId)` â€” 120s JWT
    - Audit: OtpConsumed + JobReleased
-   - `SaveChangesAsync()` — if DbUpdateConcurrencyException → throw 409 "Invalid code." (LOCK_CONFLICT)
-6. All failure messages are "Invalid code." — never reveals job existence
+   - `SaveChangesAsync()` â€” if DbUpdateConcurrencyException â†’ throw 409 "Invalid code." (LOCK_CONFLICT)
+6. All failure messages are "Invalid code." â€” never reveals job existence
 
 **Privacy invariants in ReleaseJobCommand:**
 - Does not reveal whether the job exists
 - Does not reveal whether the OTP was wrong vs. expired vs. locked
 - Uses field-anchored JSON match for rate limit: `"deviceId":"dev_xxx"` not just `dev_xxx`
 
-#### GET /api/v1/device/printjobs/{jobId}/file — Download File
+#### GET /api/v1/device/printjobs/{jobId}/file â€” Download File
 Headers: Authorization: Bearer {fileToken}  (plus HMAC headers)
 Response: PDF binary stream (Content-Type: application/pdf)
 - Validates Bearer token (JWT signature, expiry, issuer/audience)
@@ -430,39 +430,39 @@ Response: PDF binary stream (Content-Type: application/pdf)
 - Loads job, checks AssignedDeviceId == device
 - **Checks job.Status == Released** (explicit status guard, not just relying on MarkDownloading)
 - Adds UsedFileToken to change tracker (not yet saved)
-- Calls MarkDownloadingCommand — which calls SaveChangesAsync (atomically saves JTI + status transition)
+- Calls MarkDownloadingCommand â€” which calls SaveChangesAsync (atomically saves JTI + status transition)
 - Streams file from MinIO directly to HTTP response body (no disk on API server)
 
 #### POST /api/v1/device/printjobs/{jobId}/printing-started
 Request: `{ "cupsJobId": "12345", "printerName": "lp0" }`
 Response: `{ "status": "Printing" }`
 - Enforces DeviceOwnershipGuard (AssignedDeviceId must match)
-- Transitions Downloading → Printing
+- Transitions Downloading â†’ Printing
 
 #### POST /api/v1/device/printjobs/{jobId}/completed
 Request: `{ "cupsJobId": "12345" }`
 Response: `{ "status": "Completed" }`
 - Enforces DeviceOwnershipGuard
-- Transitions Printing → Completed
+- Transitions Printing â†’ Completed
 - CleanupWorker will delete file from MinIO and move to Deleted
 
 #### POST /api/v1/device/printjobs/{jobId}/failed
 Request: `{ "cupsJobId": "12345", "failureCode": "PAPER_JAM", "failureMessage": "...", "isRetryable": false }`
 Response: `{ "status": "Failed" }`
 - Enforces DeviceOwnershipGuard
-- Transitions Printing → Failed
+- Transitions Printing â†’ Failed
 - CleanupWorker will delete file and move to Deleted
 
 ---
 
-### Admin Endpoints — `/api/v1/admin/` — X-Admin-Key Header
+### Admin Endpoints â€” `/api/v1/admin/` â€” X-Admin-Key Header
 
 - Key must be set in env as `ADMIN_API_KEY`, minimum 32 characters
 - App throws `InvalidOperationException` on startup if key is missing or too short
 - Comparison uses `CryptographicOperations.FixedTimeEquals` (constant-time for same-length inputs)
 - All failures return 401 ADMIN_UNAUTHORIZED regardless of what failed
 
-#### POST /api/v1/admin/devices — Register Device
+#### POST /api/v1/admin/devices â€” Register Device
 Request: `{ "deviceId": "dev_store1_abc12345", "storeId": "store_supermart_01" }`
 Response:
 ```json
@@ -474,13 +474,13 @@ Response:
 }
 ```
 - DeviceId must start with "dev_" (enforced)
-- SharedSecret: 32 random bytes → Convert.ToBase64String (standard base64, NOT URL-safe)
-- SharedSecret returned ONCE — caller (provision-device.sh) writes it to Pi .env immediately
-- Duplicate DeviceId → 409
+- SharedSecret: 32 random bytes â†’ Convert.ToBase64String (standard base64, NOT URL-safe)
+- SharedSecret returned ONCE â€” caller (provision-device.sh) writes it to Pi .env immediately
+- Duplicate DeviceId â†’ 409
 
 #### PATCH /api/v1/admin/devices/{deviceId}/deactivate
 Response: `{ "deviceId": "...", "isActive": false }`
-- Sets IsActive = false → device rejected by HmacDeviceAuthService
+- Sets IsActive = false â†’ device rejected by HmacDeviceAuthService
 
 #### GET /api/v1/admin/devices
 Returns all devices. Never returns SharedSecret. Includes computed `isOnline` field.
@@ -493,7 +493,7 @@ Returns all stores including inactive ones.
 
 ---
 
-## 8. Security Mechanisms — Implementation Details
+## 8. Security Mechanisms â€” Implementation Details
 
 ### Device Authentication (HMAC-SHA256)
 File: `Infrastructure/Auth/HmacDeviceAuthService.cs`
@@ -520,8 +520,8 @@ File: `Infrastructure/Auth/OtpService.cs`
 
 - Parameters: MemoryCost = 65536 (64MB), TimeCost = 3, Lanes/Threads = 1, HashLength = 32
 - Uses `Argon2Type.HybridAddressing` = Argon2id
-- Verification: `Argon2.Verify(storedHash, plaintext)` — returns bool, ~100–300ms
-- Generation: `Argon2Config` → `new Argon2(config)` → `argon2.Hash()` → `config.EncodeString(hash.Buffer)`
+- Verification: `Argon2.Verify(storedHash, plaintext)` â€” returns bool, ~100â€“300ms
+- Generation: `Argon2Config` â†’ `new Argon2(config)` â†’ `argon2.Hash()` â†’ `config.EncodeString(hash.Buffer)`
 
 ### File Token (JWT HS256)
 File: `Infrastructure/Auth/JwtTokenService.cs`
@@ -530,8 +530,8 @@ File: `Infrastructure/Auth/JwtTokenService.cs`
 - Issuer: "printnest", Audience: "printnest-device"
 - Claims: `sub` = jobId.ToString(), `did` = deviceId, `jti` = Guid.ToString("N"), `iat` = unix seconds
 - TTL: 120 seconds (configurable via `Jwt:FileTokenTtlSeconds`)
-- ClockSkew = TimeSpan.Zero (strict — no grace period on 120s tokens)
-- Single-use enforced via `UsedFileTokens` table — JTI inserted atomically with state transition to Downloading
+- ClockSkew = TimeSpan.Zero (strict â€” no grace period on 120s tokens)
+- Single-use enforced via `UsedFileTokens` table â€” JTI inserted atomically with state transition to Downloading
 
 ### Signing Key Requirements
 - JWT key: minimum 32 chars (`Jwt:SigningKey` config)
@@ -541,10 +541,10 @@ File: `Infrastructure/Auth/JwtTokenService.cs`
 ### Double-Release Prevention
 - `Status` column has `IsConcurrencyToken()` in EF Core config
 - EF Core includes `WHERE status = 'Paid'` in the UPDATE query
-- Two simultaneous releases: one succeeds (status → 'Released'), the other's UPDATE finds no rows → DbUpdateConcurrencyException → 409 "Invalid code."
+- Two simultaneous releases: one succeeds (status â†’ 'Released'), the other's UPDATE finds no rows â†’ DbUpdateConcurrencyException â†’ 409 "Invalid code."
 
 ### Privacy Rules (Never Violate)
-- Never log OTP plaintext or OtpHash — search for "OtpHash" confirms it never appears in log calls
+- Never log OTP plaintext or OtpHash â€” search for "OtpHash" confirms it never appears in log calls
 - Never reveal job existence in OTP failure responses ("Invalid code." for all failures)
 - Never return OtpHash, ObjectKey, AssignedDeviceId, Sha256 in public-facing GET status
 - SharedSecret never returned in list endpoints (only returned once at registration)
@@ -558,26 +558,26 @@ File: `Infrastructure/Auth/JwtTokenService.cs`
 File: `Infrastructure/Workers/ExpiryWorker.cs`
 - Startup delay: 15 seconds (lets DB migrations complete)
 - Runs every 60 seconds
-- All cases use per-job try-catch — one failure doesn't stop the batch
+- All cases use per-job try-catch â€” one failure doesn't stop the batch
 - Single `SaveChangesAsync()` at the end covers all successfully transitioned jobs
 
-**Case 1: Paid jobs older than 7 days → Expired**
+**Case 1: Paid jobs older than 7 days â†’ Expired**
 ```
 WHERE Status = 'Paid' AND CreatedAtUtc < now - 7days
 ```
 
-**Case 2: Released jobs stuck > 10 min → Expired**
+**Case 2: Released jobs stuck > 10 min â†’ Expired**
 ```
 WHERE Status = 'Released' AND UpdatedAtUtc < now - 10min
 ```
 (Device claimed the job via OTP but never called the file download endpoint)
 
-**Case 3: Downloading/Printing stuck > 10 min → Failed**
+**Case 3: Downloading/Printing stuck > 10 min â†’ Failed**
 ```
 WHERE Status IN ('Downloading','Printing') AND UpdatedAtUtc < now - 10min
 ```
 
-**Case 4: Pre-payment abandoned jobs → Expired (NEW, added in code review)**
+**Case 4: Pre-payment abandoned jobs â†’ Expired (NEW, added in code review)**
 ```
 WHERE Status IN ('Draft','Uploaded','Quoted') AND CreatedAtUtc < now - 24h
 ```
@@ -594,12 +594,12 @@ WHERE DeletedAtUtc IS NULL AND ObjectKey IS NOT NULL
 AND Status IN ('Completed','Failed','Expired')
 ```
 Note: Only terminal statuses are in the query. `DeletePending` is NOT used as a standalone OR
-clause (was a bug — if DeletePending were ever true on an active job, it would delete the file
+clause (was a bug â€” if DeletePending were ever true on an active job, it would delete the file
 for an in-flight print). Status check is the authoritative guard.
 
 For each job:
-- Call `storage.DeleteFileAsync(job.ObjectKey)` — MinIO delete (404 is idempotent)
-- On success: Transition(job, Deleted) — sets DeletedAtUtc; DeletePending = false; add FileDeleted audit
+- Call `storage.DeleteFileAsync(job.ObjectKey)` â€” MinIO delete (404 is idempotent)
+- On success: Transition(job, Deleted) â€” sets DeletedAtUtc; DeletePending = false; add FileDeleted audit
 - On failure: job.DeletePending = true; add FileDeleteFailed audit; continue to next job
 
 **Case 2: JTI cleanup**
@@ -621,27 +621,27 @@ File: `Infrastructure/Storage/MinioStorageService.cs`
 - Object key format: `jobs/{jobId}.pdf`
 
 Operations:
-- `GeneratePresignedUploadUrlAsync(key, ttlSeconds)` → PUT URL, ContentType = "application/pdf"
-- `VerifyObjectExistsAsync(key)` → HeadObject, throws ValidationError if 404
-- `StreamFileAsync(key, responseBody, ct)` → GetObject, copies stream to response body (no disk)
-- `DeleteFileAsync(key)` → DeleteObject, ignores 404 (idempotent)
+- `GeneratePresignedUploadUrlAsync(key, ttlSeconds)` â†’ PUT URL, ContentType = "application/pdf"
+- `VerifyObjectExistsAsync(key)` â†’ HeadObject, throws ValidationError if 404
+- `StreamFileAsync(key, responseBody, ct)` â†’ GetObject, copies stream to response body (no disk)
+- `DeleteFileAsync(key)` â†’ DeleteObject, ignores 404 (idempotent)
 
 ### AppDbContext
 File: `Infrastructure/Persistence/AppDbContext.cs`
 
 - All column names: snake_case (configured via Fluent API, no data annotations on entities)
-- All JSON fields: `HasColumnType("jsonb")` — real Postgres JSONB for efficient querying
+- All JSON fields: `HasColumnType("jsonb")` â€” real Postgres JSONB for efficient querying
 - Status: `HasConversion<string>()` + `IsConcurrencyToken()` (string storage, not int enum)
 - AuditEvent.Id: `UseIdentityAlwaysColumn()` (bigserial, no sequence gaps)
 
 Key indexes:
-- `ix_print_jobs_status` — workers filter by status constantly
-- `ix_print_jobs_otp_expiry` — expiry queries
-- `ix_print_jobs_assigned_device` — device owns which jobs
-- `ix_print_jobs_delete_pending` — (exists, not currently used in query due to bug fix)
-- `ix_print_jobs_created_at` — expiry worker cutoff queries
-- `ix_audit_events_job_id` — audit log lookup by job
-- `ix_used_file_tokens_used_at` — JTI cleanup cutoff
+- `ix_print_jobs_status` â€” workers filter by status constantly
+- `ix_print_jobs_otp_expiry` â€” expiry queries
+- `ix_print_jobs_assigned_device` â€” device owns which jobs
+- `ix_print_jobs_delete_pending` â€” (exists, not currently used in query due to bug fix)
+- `ix_print_jobs_created_at` â€” expiry worker cutoff queries
+- `ix_audit_events_job_id` â€” audit log lookup by job
+- `ix_used_file_tokens_used_at` â€” JTI cleanup cutoff
 
 ### AuditService
 File: `Infrastructure/Persistence/AuditService.cs`
@@ -653,16 +653,16 @@ File: `Infrastructure/Persistence/AuditService.cs`
 ### Middleware Pipeline
 Program.cs order (matters):
 ```
-1. ErrorHandlingMiddleware    — catches ALL exceptions, converts to JSON error format
+1. ErrorHandlingMiddleware    â€” catches ALL exceptions, converts to JSON error format
 2. Swagger (dev only)
 3. CORS
-4. UseWhen → DeviceAuthMiddleware   (for /api/v1/device/* only)
-5. UseWhen → AdminAuthMiddleware    (for /api/v1/admin/* only)
+4. UseWhen â†’ DeviceAuthMiddleware   (for /api/v1/device/* only)
+5. UseWhen â†’ AdminAuthMiddleware    (for /api/v1/admin/* only)
 6. MapControllers
 ```
 
 **Critical: `UseWhen` not `MapWhen`.**
-`MapWhen` creates a parallel branch — requests processed there never reach `MapControllers`.
+`MapWhen` creates a parallel branch â€” requests processed there never reach `MapControllers`.
 `UseWhen` applies middleware conditionally then REJOINS the main pipeline. This was a fixed bug.
 
 ### DeviceAuthMiddleware
@@ -679,25 +679,25 @@ File: `Api/Middleware/DeviceAuthMiddleware.cs`
 File: `Domain/Errors/ErrorCodes.cs`
 
 ```
-OTP_INVALID       — wrong OTP or no matching job
-OTP_EXPIRED       — OTP existed but past expiry (currently returns OTP_INVALID to attacker)
-OTP_RATE_LIMITED  — >6 attempts/min from this device → 429
-OTP_LOCKED        — future per-job locking (field reserved in schema)
-JOB_STATE_INVALID — attempted invalid state transition → 409
-JOB_NOT_FOUND     — job UUID does not exist → 404
-DEVICE_UNAUTHORIZED — HMAC auth failed → 401
-TOKEN_INVALID     — JWT malformed or wrong device → 401
-TOKEN_EXPIRED     — JWT past 120s TTL → 401
-TOKEN_ALREADY_USED — JTI already in UsedFileTokens → 401
-STORAGE_ERROR     — MinIO operation failed
-LOCK_CONFLICT     — optimistic concurrency (double-release) → 409
-VALIDATION_ERROR  — invalid input (file type, size, etc.) → 422
-ADMIN_UNAUTHORIZED — wrong or missing X-Admin-Key → 401
+OTP_INVALID       â€” wrong OTP or no matching job
+OTP_EXPIRED       â€” OTP existed but past expiry (currently returns OTP_INVALID to attacker)
+OTP_RATE_LIMITED  â€” >6 attempts/min from this device â†’ 429
+OTP_LOCKED        â€” future per-job locking (field reserved in schema)
+JOB_STATE_INVALID â€” attempted invalid state transition â†’ 409
+JOB_NOT_FOUND     â€” job UUID does not exist â†’ 404
+DEVICE_UNAUTHORIZED â€” HMAC auth failed â†’ 401
+TOKEN_INVALID     â€” JWT malformed or wrong device â†’ 401
+TOKEN_EXPIRED     â€” JWT past 120s TTL â†’ 401
+TOKEN_ALREADY_USED â€” JTI already in UsedFileTokens â†’ 401
+STORAGE_ERROR     â€” MinIO operation failed
+LOCK_CONFLICT     â€” optimistic concurrency (double-release) â†’ 409
+VALIDATION_ERROR  â€” invalid input (file type, size, etc.) â†’ 422
+ADMIN_UNAUTHORIZED â€” wrong or missing X-Admin-Key â†’ 401
 ```
 
 **Note:** `INTERNAL_ERROR` is used as an inline string in `ErrorHandlingMiddleware` for unhandled
 exceptions that don't map to a `DomainException`. This code is **NOT** a constant in `ErrorCodes.cs`
-— it is the only error code defined outside that file. In production it returns a generic message;
+â€” it is the only error code defined outside that file. In production it returns a generic message;
 in Development mode it includes `ex.Message`.
 
 ---
@@ -706,8 +706,8 @@ in Development mode it includes `ex.Message`.
 
 Two EF Core migrations in `Infrastructure/Persistence/Migrations/`:
 
-1. `20260219183149_InitialSchema` — full schema creation
-2. `20260219183644_AddConcurrencyToken` — adds xmin or status as concurrency token
+1. `20260219183149_InitialSchema` â€” full schema creation
+2. `20260219183644_AddConcurrencyToken` â€” adds xmin or status as concurrency token
 
 Migrations run automatically on startup via `db.Database.Migrate()` in Program.cs.
 
@@ -723,18 +723,18 @@ dotnet ef database update
 File: `docker-compose.yml`
 
 Services:
-- `postgres:16-alpine` — data volume persisted, healthcheck on pg_isready
-- `minio:latest` — data volume persisted, healthcheck on /minio/health/live
-- `minio-init` — runs `mc mb` to create the bucket on first start
-- `api` — built from Dockerfile, depends_on postgres + minio with condition: service_healthy
+- `postgres:16-alpine` â€” data volume persisted, healthcheck on pg_isready
+- `minio:latest` â€” data volume persisted, healthcheck on /minio/health/live
+- `minio-init` â€” runs `mc mb` to create the bucket on first start
+- `api` â€” built from Dockerfile, depends_on postgres + minio with condition: service_healthy
 
 Environment variables via `infra/.env` (copy from `infra/.env.example`):
 ```
 POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
 MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / MINIO_BUCKET
-JWT_SIGNING_KEY         (≥32 chars)
+JWT_SIGNING_KEY         (â‰¥32 chars)
 JWT_FILE_TOKEN_TTL_SECONDS  (default 120)
-ADMIN_API_KEY           (≥32 chars)
+ADMIN_API_KEY           (â‰¥32 chars)
 CORS_ALLOWED_ORIGINS    (comma-separated)
 STORAGE_ENDPOINT        (http://minio:9000 for compose)
 STORAGE_USE_HTTPS       (false for local)
@@ -742,7 +742,7 @@ STORAGE_USE_HTTPS       (false for local)
 
 **Critical: docker-compose env var naming uses double-underscore (`__`) for nested ASP.NET config.**
 ASP.NET Core uses `:` as the config hierarchy separator (`Jwt:SigningKey`). In docker-compose.yml
-environment blocks, `:` is not valid — use `__` instead:
+environment blocks, `:` is not valid â€” use `__` instead:
 
 | ASP.NET config key | docker-compose env var |
 |--------------------|------------------------|
@@ -758,7 +758,7 @@ environment blocks, `:` is not valid — use `__` instead:
 Flat keys (`ADMIN_API_KEY`, `ASPNETCORE_URLS`, `ASPNETCORE_ENVIRONMENT`, and the Postgres/MinIO
 keys) have no nesting so no double-underscore is needed.
 
-`ASPNETCORE_URLS=http://+:8080` is set inside the container. Port mapping: 5000 (host) → 8080 (container).
+`ASPNETCORE_URLS=http://+:8080` is set inside the container. Port mapping: 5000 (host) â†’ 8080 (container).
 
 API listens on port 5000 externally (maps to 8080 inside container).
 
@@ -780,83 +780,83 @@ Usage: `ADMIN_API_KEY=your-key ./provision-device.sh dev_store1_abc12345 [store_
 Usage: `./simulate-device.sh <DEVICE_ID> <SHARED_SECRET_BASE64> <OTP_CODE> [API_URL]`
 
 - Requires: curl, jq, openssl, xxd
-- `sign()` function computes HMAC-SHA256: decodes base64 secret → hex via xxd, builds message
+- `sign()` function computes HMAC-SHA256: decodes base64 secret â†’ hex via xxd, builds message
   with `printf '%s\n%s\n%s\n%s' ts method path bodyHash`, pipes to
   `openssl dgst -sha256 -mac HMAC -macopt "hexkey:$secret_hex"`
 - `device_call()` function wraps curl with X-Device-Id, X-Timestamp, X-Signature headers
-- Steps: Heartbeat → Release → file download → printing-started → completed
+- Steps: Heartbeat â†’ Release â†’ file download â†’ printing-started â†’ completed
 - Downloads file to `$OUTPUT_DIR/printnest-{jobId}.pdf` (default /tmp)
 
 ---
 
 ## 15. Bugs Found and Fixed (Do Not Re-Introduce)
 
-1. **`MapWhen` vs `UseWhen`** — MapWhen creates a parallel branch; device/admin requests
+1. **`MapWhen` vs `UseWhen`** â€” MapWhen creates a parallel branch; device/admin requests
    would 404. Fixed to UseWhen. Program.cs now uses UseWhen for both device and admin middleware.
 
-2. **Missing `IsConcurrencyToken()` on Status** — EF Core would not include Status in WHERE
+2. **Missing `IsConcurrencyToken()` on Status** â€” EF Core would not include Status in WHERE
    clause of UPDATE, so two simultaneous releases would both succeed. Fixed in AppDbContext.
 
-3. **`OtpAttempts++` on success path** — was incrementing on match before we removed it.
-   Fixed — ApplyEffects on Released already resets OtpAttempts to 0.
+3. **`OtpAttempts++` on success path** â€” was incrementing on match before we removed it.
+   Fixed â€” ApplyEffects on Released already resets OtpAttempts to 0.
 
-4. **Pre-payment jobs never expired** — Draft/Uploaded/Quoted jobs never reached Expired/Deleted,
+4. **Pre-payment jobs never expired** â€” Draft/Uploaded/Quoted jobs never reached Expired/Deleted,
    leaving files in MinIO forever. Fixed: added three transitions to AllowedTransitions, added
    Case 4 in ExpiryWorker (24h cutoff).
 
-5. **DownloadFile missing status check** — comment said "must be in Released state" but only
-   AssignedDeviceId was checked. Fixed: explicit `job.Status != Released → throw 409`.
+5. **DownloadFile missing status check** â€” comment said "must be in Released state" but only
+   AssignedDeviceId was checked. Fixed: explicit `job.Status != Released â†’ throw 409`.
 
-6. **CleanupWorker DeletePending OR clause** — `|| j.DeletePending` without status guard could
+6. **CleanupWorker DeletePending OR clause** â€” `|| j.DeletePending` without status guard could
    pick up active jobs if DeletePending were somehow true, deleting their MinIO file. Fixed:
    removed the standalone DeletePending clause; terminal status check is the authoritative guard.
 
-7. **AdminAuthMiddleware misleading comment** — claimed FixedTimeEquals works "even on wrong-length
+7. **AdminAuthMiddleware misleading comment** â€” claimed FixedTimeEquals works "even on wrong-length
    keys" which is false. Fixed the comment. The code behavior is acceptable for this use case.
 
-8. **ReleaseJobCommand MetaJson.Contains imprecise** — `dev_a` would match inside `dev_abc123`.
+8. **ReleaseJobCommand MetaJson.Contains imprecise** â€” `dev_a` would match inside `dev_abc123`.
    Fixed: uses anchored JSON fragment `"deviceId":"dev_x"` for the rate limit query.
 
-9. **OtpHash not cleared on Expired transition** — minor privacy gap. Fixed: ApplyEffects
+9. **OtpHash not cleared on Expired transition** â€” minor privacy gap. Fixed: ApplyEffects
    for Expired now clears OtpHash, OtpExpiryUtc, OtpLockedUntilUtc.
 
-10. **Heartbeat flooding audit_events** — every heartbeat was creating an AuditEvent row.
+10. **Heartbeat flooding audit_events** â€” every heartbeat was creating an AuditEvent row.
     Fixed: removed AuditEvent from heartbeat handler. LastHeartbeatUtc on Device is sufficient.
 
 ---
 
 ## 16. Known Limitations (Accepted for MVP, Not Bugs)
 
-- **Argon2 is synchronous** — blocks thread pool ~200ms per verify. Acceptable for MVP.
+- **Argon2 is synchronous** â€” blocks thread pool ~200ms per verify. Acceptable for MVP.
   For production: wrap in `Task.Run` in OtpService.Verify.
 
-- **O(N) Argon2 scan in release** — all Paid jobs with active OTPs are loaded and iterated.
-  For 50 simultaneous jobs: 50 × 200ms = 10s per release attempt. Acceptable for MVP.
+- **O(N) Argon2 scan in release** â€” all Paid jobs with active OTPs are loaded and iterated.
+  For 50 simultaneous jobs: 50 Ã— 200ms = 10s per release attempt. Acceptable for MVP.
   Future fix: add a fast-path index (e.g., first 3 OTP digits stored separately).
 
-- **AdminKey byte-length leakable via timing** — FixedTimeEquals returns false immediately
+- **AdminKey byte-length leakable via timing** â€” FixedTimeEquals returns false immediately
   for different-length spans. An attacker can binary-search key length. Acceptable: key has
-  ≥32 chars entropy, admin endpoint should not be public.
+  â‰¥32 chars entropy, admin endpoint should not be public.
 
-- **Per-job OTP locking unused** — OtpLockedUntilUtc and OtpAttempts fields exist in schema
-  but are never written (because we can't identify which job to lock on failure — device doesn't
+- **Per-job OTP locking unused** â€” OtpLockedUntilUtc and OtpAttempts fields exist in schema
+  but are never written (because we can't identify which job to lock on failure â€” device doesn't
   know the jobId, only the OTP). Per-device-per-minute rate limiting is the active protection.
 
-- **Argon2 stuckInStatus audit bug** — in ExpiryWorker, job.Status is read after the transition,
+- **Argon2 stuckInStatus audit bug** â€” in ExpiryWorker, job.Status is read after the transition,
   so MetaJson["stuckInStatus"] always shows the post-transition value ("Expired"/"Failed") not
   the original. Minor audit log inaccuracy only, no functional impact.
 
-- **Mock payment** — payment is a no-op. Real payment integration (Razorpay etc.) is a future phase.
+- **Mock payment** â€” payment is a no-op. Real payment integration (Razorpay etc.) is a future phase.
 
-- **Color printing** — disabled in QuoteJobCommand (returns validation error). Color = "Coming Soon".
+- **Color printing** â€” disabled in QuoteJobCommand (returns validation error). Color = "Coming Soon".
 
 ---
 
 ## 17. Git History (Context for Commit Conventions)
 
 ```
-1e12604 feat: Phase 2 — device provisioning + simulator + complete API test file
-0d264af fix: code review — plug lifecycle gaps and tighten security checks
+1e12604 feat: Phase 2 â€” device provisioning + simulator + complete API test file
+0d264af fix: code review â€” plug lifecycle gaps and tighten security checks
 37d2151 Fix 3 bugs found in Phase 1 audit
 b8c54c1 Phase 1: full backend foundation
 1197fa7 Initial commit: .NET 8 skeleton + project spec
@@ -881,7 +881,7 @@ Branch: main
 - EF Core migrations
 
 **Phase 1 Audit (3 bugs fixed)**
-- MapWhen → UseWhen
+- MapWhen â†’ UseWhen
 - IsConcurrencyToken added to Status
 - OtpAttempts++ removed from success path
 
@@ -895,35 +895,35 @@ Branch: main
 - OtpHash cleared on Expired transition
 
 **Phase 2: Testing + Tooling**
-- `tools/provision-device.sh` — device registration CLI
-- `tools/simulate-device.sh` — full device flow simulation (HMAC-signed bash)
-- `printnest.http` — complete VS Code REST Client test file
+- `tools/provision-device.sh` â€” device registration CLI
+- `tools/simulate-device.sh` â€” full device flow simulation (HMAC-signed bash)
+- `printnest.http` â€” complete VS Code REST Client test file
 - CLAUDE.md updated with all transitions and testing guide
 
 ---
 
-## 19. What Comes Next — Phase 3
+## 19. What Comes Next â€” Phase 3
 
 **Phase 3: Integration Tests (xUnit, WebApplicationFactory)**
 
 The `public partial class Program { }` in Program.cs exists specifically for this.
 
 Test scenarios to cover:
-1. **Happy path**: full job lifecycle Draft→Uploaded→Quoted→Paid→Released→Downloading→Printing→Completed→Deleted
+1. **Happy path**: full job lifecycle Draftâ†’Uploadedâ†’Quotedâ†’Paidâ†’Releasedâ†’Downloadingâ†’Printingâ†’Completedâ†’Deleted
 2. **OTP single-use**: after release, same OTP rejected
 3. **OTP expiry**: set OtpExpiryUtc in past, verify release fails
-4. **Double-release prevention**: two concurrent release requests for same OTP — only one succeeds, other gets LOCK_CONFLICT
+4. **Double-release prevention**: two concurrent release requests for same OTP â€” only one succeeds, other gets LOCK_CONFLICT
 5. **File token single-use**: second download with same token rejected (TOKEN_ALREADY_USED)
 6. **File token expiry**: use 1-second TTL token, wait, verify rejection (TOKEN_EXPIRED)
-7. **HMAC replay attack**: reuse X-Timestamp > 5min in past → 401
-8. **HMAC wrong signature**: correct timestamp, wrong signature → 401
-9. **Rate limiting**: 6 failed OTP attempts in 60s → 7th returns 429
+7. **HMAC replay attack**: reuse X-Timestamp > 5min in past â†’ 401
+8. **HMAC wrong signature**: correct timestamp, wrong signature â†’ 401
+9. **Rate limiting**: 6 failed OTP attempts in 60s â†’ 7th returns 429
 10. **ExpiryWorker**: set CreatedAtUtc to 25h ago on Quoted job, trigger worker, verify Expired
 11. **CleanupWorker**: transition job to Completed manually, trigger worker, verify Deleted + MinIO file gone
-12. **State machine rejection**: attempt invalid transition (e.g. Draft→Completed) → JOB_STATE_INVALID
-13. **Pre-payment abandonment**: Draft job 25h old → ExpiryWorker → Expired → CleanupWorker → Deleted
+12. **State machine rejection**: attempt invalid transition (e.g. Draftâ†’Completed) â†’ JOB_STATE_INVALID
+13. **Pre-payment abandonment**: Draft job 25h old â†’ ExpiryWorker â†’ Expired â†’ CleanupWorker â†’ Deleted
 14. **Device ownership**: device A cannot mark completed a job owned by device B
-15. **Admin key validation**: wrong/missing key → 401; correct key → 200
+15. **Admin key validation**: wrong/missing key â†’ 401; correct key â†’ 200
 
 **Infrastructure for tests:**
 - Use `WebApplicationFactory<Program>` with `TestServer`
@@ -938,7 +938,7 @@ Test scenarios to cover:
 ```bash
 # 1. Set up environment
 cp infra/.env.example infra/.env
-# Edit infra/.env: set strong ADMIN_API_KEY and JWT_SIGNING_KEY (both ≥32 chars)
+# Edit infra/.env: set strong ADMIN_API_KEY and JWT_SIGNING_KEY (both â‰¥32 chars)
 
 # 2. Start everything
 docker-compose up
@@ -946,7 +946,7 @@ docker-compose up
 # 3. Verify running
 curl http://localhost:5000/health
 
-# 4. Open printnest.http in VS Code and run Steps 1a–8
+# 4. Open printnest.http in VS Code and run Steps 1aâ€“8
 
 # 5. Simulate a device
 ADMIN_API_KEY=your-key bash tools/provision-device.sh dev_store1_abc12345 store_supermart_01
@@ -961,22 +961,22 @@ MinIO Console: http://localhost:9001 (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
 
 ## 21. Adding a New Feature (Checklist)
 
-1. New state? → `Domain/Enums/JobStatus.cs` + `AllowedTransitions` in `JobStateMachine.cs` + `ApplyEffects` if needed
-2. New external system? → Interface in `Application/Interfaces/` + implementation in `Infrastructure/`
-3. New use case? → Sealed command class in `Application/Commands/`
-4. Needs audit? → Call `IAuditService.RecordAsync(...)` BEFORE `SaveChangesAsync()` — it's in the same transaction
-5. New HTTP endpoint? → Controller action in appropriate `Api/Controllers/` subfolder
-6. Register in `Program.cs` → `builder.Services.AddScoped<YourThing>()`
-7. Schema change? → `dotnet ef migrations add YourMigrationName`
-8. New error code? → Add constant to `Domain/Errors/ErrorCodes.cs`
+1. New state? â†’ `Domain/Enums/JobStatus.cs` + `AllowedTransitions` in `JobStateMachine.cs` + `ApplyEffects` if needed
+2. New external system? â†’ Interface in `Application/Interfaces/` + implementation in `Infrastructure/`
+3. New use case? â†’ Sealed command class in `Application/Commands/`
+4. Needs audit? â†’ Call `IAuditService.RecordAsync(...)` BEFORE `SaveChangesAsync()` â€” it's in the same transaction
+5. New HTTP endpoint? â†’ Controller action in appropriate `Api/Controllers/` subfolder
+6. Register in `Program.cs` â†’ `builder.Services.AddScoped<YourThing>()`
+7. Schema change? â†’ `dotnet ef migrations add YourMigrationName`
+8. New error code? â†’ Add constant to `Domain/Errors/ErrorCodes.cs`
 
 ---
 
 ## 22. Pricing Logic (QuoteJobCommand)
 
 ```csharp
-const int PricePerCopyPaise = 200;   // ₹2.00
-const int MinimumPricePaise  = 500;  // ₹5.00
+const int PricePerCopyPaise = 200;   // â‚¹2.00
+const int MinimumPricePaise  = 500;  // â‚¹5.00
 
 var priceCents = Math.Max(input.Options.Copies * PricePerCopyPaise, MinimumPricePaise);
 ```
@@ -990,9 +990,9 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 | Config Key | Env Var | Description |
 |-----------|---------|-------------|
 | `ConnectionStrings:Postgres` | built from POSTGRES_* | Npgsql connection string |
-| `Jwt:SigningKey` | JWT_SIGNING_KEY | HS256 signing key (≥32 chars) |
+| `Jwt:SigningKey` | JWT_SIGNING_KEY | HS256 signing key (â‰¥32 chars) |
 | `Jwt:FileTokenTtlSeconds` | JWT_FILE_TOKEN_TTL_SECONDS | File token TTL (default 120) |
-| `AdminApiKey` | ADMIN_API_KEY | Admin endpoint key (≥32 chars) |
+| `AdminApiKey` | ADMIN_API_KEY | Admin endpoint key (â‰¥32 chars) |
 | `Cors:AllowedOrigins` | CORS_ALLOWED_ORIGINS | Comma-separated origins |
 | `Storage:Endpoint` | STORAGE_ENDPOINT | MinIO URL |
 | `Storage:AccessKey` | MINIO_ROOT_USER | MinIO access key |
@@ -1007,23 +1007,23 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 **Date:** 2026-02-26
 
 **Completed this session:**
-- Created `infra/.env` from template and generated local secrets for Postgres/MinIO/JWT/Admin key
-- Fixed Docker build reliability: `Dockerfile` now restores/publishes `printnest.csproj` explicitly
-- Added `.dockerignore` to exclude `bin/`, `obj/`, `.git/`, editor folders, and `infra/.env`
-- Started local stack with `docker compose --env-file infra/.env up -d --build`
-- Verified runtime health: API up on `http://localhost:5000`, Postgres healthy on `5432`, MinIO healthy on `9000/9001`
-- Ran smoke test against API (`POST /api/v1/public/printjobs`) and confirmed DB write in `print_jobs`
-- Committed Docker setup fixes: `43380f0` (`fix docker setup`)
+- Executed end-to-end local validation: admin setup, public job lifecycle, OTP generation, device simulation, and successful completion flow
+- Confirmed working device flow through all transitions: Released -> Downloading -> Printing -> Completed -> Deleted (cleanup worker)
+- Fixed `ReleaseJobCommand` rate-limit query bug for Postgres JSONB (`jsonb ~~ jsonb` failure) by narrowing in SQL and matching in memory
+- Fixed OTP generation bug in `OtpService` by adding a random salt to Argon2 config (previous hashes were truncated/invalid for verify)
+- Fixed JWT validation bug in `JwtTokenService` by handling mapped claims (`sub`/`jti` fallbacks)
+- Normalized `tools/simulate-device.sh` line endings so Bash runs correctly on Windows environments
+- Rebuilt `printnest.http` into a clean, strict run-order test flow and removed broken variable collisions
+- Added `TESTING_GUIDE.md` with step-by-step testing instructions, inputs, expected outputs, and troubleshooting
 
-**Stopped at:** Runtime is up and validated. Project state is clean with no uncommitted changes.
+**Stopped at:** All major runtime/testing blockers are fixed and validated locally. Changes are ready to commit.
 
-**Next step:** Run `printnest.http` end-to-end (public + device/admin flow) and confirm each transition, then start Phase 3 integration tests (Section 19) beginning with the happy-path lifecycle test.
+**Next step:** Commit all current changes, then begin Phase 3 integration tests (Section 19), starting with the happy-path lifecycle test in xUnit + WebApplicationFactory.
 
-**Pending decisions:** None blocking. Optional decision: use real MinIO in integration tests via Testcontainers vs mocking `IStorageService`.
+**Pending decisions:** None blocking.
 
 **Context notes:**
-- Keep `infra/.env` local only; never commit secrets
-- Docker command that works in this repo: `docker compose --env-file infra/.env up -d --build`
-- If compose warns about obsolete `version` key, it is non-blocking for local run
-- `public partial class Program { }` exists for `WebApplicationFactory` tests
-- `print_jobs` currently contains at least one smoke-test record from local API validation
+- For host-side Step 7 upload in `printnest.http`, replace `https://minio:9000` with `http://localhost:9000` in `@uploadUrl`
+- Existing older test jobs may remain in non-terminal states from pre-fix runs; use fresh jobs for validation
+- `infra/.env` secrets are local-only and must not be committed
+- Current modified files include command/auth fixes plus docs/test-flow updates

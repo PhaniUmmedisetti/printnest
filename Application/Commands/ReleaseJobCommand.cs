@@ -82,11 +82,17 @@ public sealed class ReleaseJobCommand
         // e.g. dev_abc must not match inside dev_abc123. The pattern
         // "deviceId":"dev_abc" is unique within our serialized JSON format.
         var deviceIdJsonFragment = $"\"deviceId\":\"{input.DeviceId}\"";
-        var recentAttempts = await _db.AuditEvents
-            .CountAsync(e =>
+        // MetaJson is stored as jsonb in Postgres. Filtering by substring on jsonb can
+        // translate to unsupported SQL operators, so we narrow in SQL first, then match in memory.
+        var recentAttemptMeta = await _db.AuditEvents
+            .Where(e =>
                 e.Type == AuditEventType.OtpAttemptFailed &&
                 e.CreatedAtUtc > oneMinuteAgo &&
-                e.MetaJson != null && e.MetaJson.Contains(deviceIdJsonFragment));
+                e.MetaJson != null)
+            .Select(e => e.MetaJson!)
+            .ToListAsync();
+
+        var recentAttempts = recentAttemptMeta.Count(meta => meta.Contains(deviceIdJsonFragment, StringComparison.Ordinal));
 
         if (recentAttempts >= MaxAttemptsPerMinutePerDevice)
             throw new DomainException(ErrorCodes.OtpRateLimited, "Invalid code.", httpStatus: 429);
