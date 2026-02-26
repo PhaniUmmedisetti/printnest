@@ -8,11 +8,11 @@ WORKDIR /src
 
 # Copy csproj and restore — separate layer for caching
 COPY printnest.csproj .
-RUN dotnet restore
+RUN dotnet restore printnest.csproj
 
 # Copy everything and build
 COPY . .
-RUN dotnet publish -c Release -o /app/publish --no-restore
+RUN dotnet publish printnest.csproj -c Release -o /app/publish
 
 # ── Runtime image ─────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
