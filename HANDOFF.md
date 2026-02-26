@@ -626,6 +626,32 @@ Operations:
 - `StreamFileAsync(key, responseBody, ct)` â†’ GetObject, copies stream to response body (no disk)
 - `DeleteFileAsync(key)` â†’ DeleteObject, ignores 404 (idempotent)
 
+### Printer Monitoring - HP DeskJet 2338 (USB via Raspberry Pi)
+
+We are currently using HP DeskJet 2338 (USB-only inkjet) connected to Raspberry Pi running CUPS.
+
+What is supported:
+- Printer status (reliable): Online/Offline, Idle/Printing, Paper Out, Door Open, Cartridge Missing, general error state
+- Status accuracy: ~98-100%
+- Ink status (limited, state-based): OK, Low, Very Low, Empty
+- Ink signals may be available via HPLIP
+- Ink warning accuracy: "Low" ~70-85%, "Empty" ~95-100%
+
+What is not supported:
+- Exact ink percentages (for example 42%, 63%)
+- Reliable gradual ink telemetry
+- Predictive ink depletion tracking
+
+Important technical notes:
+- This is a consumer host-based USB printer.
+- Ink estimation is counter-based, not sensor-based.
+- Refilled cartridges can make reported ink state inaccurate.
+- Some units may jump directly from "OK" to "Very Low."
+
+Architecture guidance:
+- MVP: implement state-based monitoring only; store printer status plus ink warning state; do not assume percentage telemetry
+- Production scale: move to network-enabled business-class laser printers with SNMP/IPP consumable reporting for accurate toner percentages
+
 ### AppDbContext
 File: `Infrastructure/Persistence/AppDbContext.cs`
 
@@ -1016,14 +1042,14 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 - Rebuilt `printnest.http` into a clean, strict run-order test flow and removed broken variable collisions
 - Added `TESTING_GUIDE.md` with step-by-step testing instructions, inputs, expected outputs, and troubleshooting
 
-**Stopped at:** All major runtime/testing blockers are fixed and validated locally. Changes are ready to commit.
+**Stopped at:** Runtime flow is validated end-to-end and fixes are committed. MVP reminder added for pending printer-monitoring feature.
 
-**Next step:** Commit all current changes, then begin Phase 3 integration tests (Section 19), starting with the happy-path lifecycle test in xUnit + WebApplicationFactory.
+**Next step:** Begin Phase 3 integration tests (Section 19), starting with the happy-path lifecycle test in xUnit + WebApplicationFactory, then implement MVP state-based printer monitoring for HP DeskJet 2338.
 
-**Pending decisions:** None blocking.
+**Pending decisions:** None blocking. Monitoring scope is fixed to state-based telemetry only (no percentage ink telemetry for MVP).
 
 **Context notes:**
 - For host-side Step 7 upload in `printnest.http`, replace `https://minio:9000` with `http://localhost:9000` in `@uploadUrl`
 - Existing older test jobs may remain in non-terminal states from pre-fix runs; use fresh jobs for validation
 - `infra/.env` secrets are local-only and must not be committed
-- Current modified files include command/auth fixes plus docs/test-flow updates
+- MVP pending feature reminder: add printer status + ink warning state monitoring for HP DeskJet 2338 (USB/CUPS); do not assume exact ink percentages

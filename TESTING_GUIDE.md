@@ -151,7 +151,18 @@ After this, cleanup worker should move job from `Completed` to `Deleted` within 
 - Device simulator says `jq` missing
   - Fix (Ubuntu WSL): `sudo apt-get update && sudo apt-get install -y jq`
 
-## 6) Safe ways to play around
+## 6) Printer monitoring expectations (HP DeskJet 2338)
+
+Current MVP hardware is HP DeskJet 2338 over USB via Raspberry Pi + CUPS.
+
+- Reliable to monitor: online/offline, idle/printing, paper-out, door-open, cartridge-missing, general error
+- Status accuracy is typically ~98-100%
+- Ink monitoring is only state-based (`OK`, `Low`, `Very Low`, `Empty`), not percentage-based
+- Ink warning quality: `Low` is approximate (~70-85%), `Empty` is strong (~95-100%)
+- Do not build app logic around exact ink percentages for this printer class
+- Refilled cartridges and host-based counter behavior can make ink status inaccurate
+
+## 7) Safe ways to play around
 
 - Change `copies` in Step 9 and check pricing
 - Call Step 11 multiple times and verify OTP changes

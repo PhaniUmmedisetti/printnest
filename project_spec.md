@@ -223,6 +223,63 @@ All device endpoints must enforce:
   - never leaves files behind
   - safe on restart (cleans stale /tmp/printjobs)
 
+### Printer Monitoring – HP DeskJet 2338 (USB via Raspberry Pi)
+
+We are currently using HP DeskJet 2338 (USB-only inkjet) connected to Raspberry Pi running CUPS.
+
+What is Supported
+
+Printer Status (Reliable)
+
+- Online / Offline
+- Idle / Printing
+- Paper Out
+- Door Open
+- Cartridge Missing
+- General Error State
+- Accuracy: ~98-100%
+
+Ink Status (Limited Support)
+
+Can detect state-based warnings:
+
+- OK
+- Low
+- Very Low
+- Empty
+
+May be available via HPLIP
+
+Accuracy:
+
+- "Low" warning: ~70-85%
+- "Empty" warning: ~95-100%
+
+What is NOT Supported
+
+- Exact ink percentage values (e.g., 42%, 63%)
+- Reliable gradual ink telemetry
+- Predictive ink depletion tracking
+
+Important Technical Notes
+
+- This is a consumer, host-based USB printer.
+- Ink estimation is counter-based, not sensor-based.
+- If cartridges are refilled, ink status may become inaccurate.
+- Some units may jump directly from "OK" to "Very Low."
+
+Architecture Consideration
+
+For MVP:
+
+- Implement state-based monitoring only.
+- Store printer status + ink warning state.
+- Do NOT design backend assuming percentage-based telemetry.
+
+For Production Scale:
+
+- Consider migrating to network-enabled business-class laser printers with SNMP/IPP consumable reporting for accurate toner percentage tracking.
+
 ## 9) Web Frontend (MVP)
 
 Pages:
