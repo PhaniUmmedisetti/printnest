@@ -6,6 +6,31 @@ be able to pick up the project in full fidelity without reading any other file f
 
 ---
 
+## !! AI ASSISTANT — READ THIS FIRST !!
+
+### Session Bookmark Protocol
+
+**On every session start:**
+1. Read the `## CURRENT BOOKMARK` section at the bottom of this file.
+2. Tell the user exactly where work was left off, what was completed, and what is next.
+3. Do this before asking any questions or writing any code.
+
+**When the user says any of these (or similar):**
+> "stop", "bookmark this", "that's it for today", "calling it a day",
+> "save progress", "end session", "pause here", "note this down"
+
+→ Immediately update the `## CURRENT BOOKMARK` section at the bottom of this file with:
+- **Date** (today's date)
+- **Completed this session** — bullet list of everything finished
+- **Stopped at** — the exact task/file/step where work paused (be specific: file name, function, test name, etc.)
+- **Next step** — the single next action to take when resuming
+- **Pending decisions** — anything the user needs to decide before work can continue
+- **Context notes** — any non-obvious state (e.g. "migration not yet run", "env var missing", "test failing for known reason")
+
+Update the bookmark section in-place — overwrite the previous bookmark. Only the latest matters.
+
+---
+
 ## 1. What Is This Product
 
 **PrintNest** is a privacy-first print kiosk network.
@@ -328,8 +353,9 @@ Response:
 - Safe to poll; no side effects
 
 #### GET /api/v1/public/stores — Active Stores for Map
-Response: `[{ "storeId", "name", "address", "latitude", "longitude", "isActive", ... }]`
-- Only active stores (IsActive = true)
+Response: `[{ "storeId", "name", "address", "latitude", "longitude" }]`
+- Only active stores (IsActive = true) — filter is server-side; `isActive` is NOT in the response
+- Projection is explicit (5 fields only) — the full Store entity is never returned on this endpoint
 - Used by customer app to render the map and let user select a store
 
 ---
@@ -669,6 +695,11 @@ VALIDATION_ERROR  — invalid input (file type, size, etc.) → 422
 ADMIN_UNAUTHORIZED — wrong or missing X-Admin-Key → 401
 ```
 
+**Note:** `INTERNAL_ERROR` is used as an inline string in `ErrorHandlingMiddleware` for unhandled
+exceptions that don't map to a `DomainException`. This code is **NOT** a constant in `ErrorCodes.cs`
+— it is the only error code defined outside that file. In production it returns a generic message;
+in Development mode it includes `ex.Message`.
+
 ---
 
 ## 12. Migrations
@@ -708,6 +739,26 @@ CORS_ALLOWED_ORIGINS    (comma-separated)
 STORAGE_ENDPOINT        (http://minio:9000 for compose)
 STORAGE_USE_HTTPS       (false for local)
 ```
+
+**Critical: docker-compose env var naming uses double-underscore (`__`) for nested ASP.NET config.**
+ASP.NET Core uses `:` as the config hierarchy separator (`Jwt:SigningKey`). In docker-compose.yml
+environment blocks, `:` is not valid — use `__` instead:
+
+| ASP.NET config key | docker-compose env var |
+|--------------------|------------------------|
+| `Jwt:SigningKey` | `Jwt__SigningKey` |
+| `Jwt:FileTokenTtlSeconds` | `Jwt__FileTokenTtlSeconds` |
+| `Storage:Endpoint` | `Storage__Endpoint` |
+| `Storage:AccessKey` | `Storage__AccessKey` |
+| `Storage:SecretKey` | `Storage__SecretKey` |
+| `Storage:BucketName` | `Storage__BucketName` |
+| `Storage:UseHttps` | `Storage__UseHttps` |
+| `Cors:AllowedOrigins` | `Cors__AllowedOrigins` |
+
+Flat keys (`ADMIN_API_KEY`, `ASPNETCORE_URLS`, `ASPNETCORE_ENVIRONMENT`, and the Postgres/MinIO
+keys) have no nesting so no double-underscore is needed.
+
+`ASPNETCORE_URLS=http://+:8080` is set inside the container. Port mapping: 5000 (host) → 8080 (container).
 
 API listens on port 5000 externally (maps to 8080 inside container).
 
@@ -948,3 +999,31 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 | `Storage:SecretKey` | MINIO_ROOT_PASSWORD | MinIO secret key |
 | `Storage:BucketName` | MINIO_BUCKET | MinIO bucket (default "printfiles") |
 | `Storage:UseHttps` | STORAGE_USE_HTTPS | false for local MinIO |
+
+---
+
+## CURRENT BOOKMARK
+
+**Date:** 2026-02-26
+
+**Completed this session:**
+- Phase 1: Full backend foundation (all entities, commands, workers, middleware, controllers, migrations)
+- Phase 1 audit: fixed 3 bugs (MapWhen→UseWhen, IsConcurrencyToken, OtpAttempts++)
+- Code review: fixed 7 more issues (pre-payment expiry, DownloadFile status check, CleanupWorker DeletePending clause, AdminAuth comment, MetaJson rate-limit anchoring, heartbeat audit flood, OtpHash clearing on Expired)
+- Phase 2: provision-device.sh, simulate-device.sh, printnest.http (complete REST test file), CLAUDE.md updated
+- HANDOFF.md deep audit: fixed 6 gaps (stores projection, docker-compose __ naming table, INTERNAL_ERROR inline note, objectKey bug in printnest.http, GenerateOtp state machine note, pricing per-copy flat rate)
+- printnest.http cleaned: removed dead @objectKey variable, fixed Step 3 comment, fixed Step 5 body (was sending wrong field)
+- Session bookmark protocol added to HANDOFF.md
+
+**Stopped at:** All files clean. No work in flight. Ready to start Phase 3 fresh.
+
+**Next step:** Phase 3 — Integration tests (xUnit + WebApplicationFactory). Start with the happy-path test: full job lifecycle Draft→Uploaded→Quoted→Paid→Released→Downloading→Printing→Completed→Deleted. See Section 19 in this file for all 15 test scenarios.
+
+**Pending decisions:** None — Phase 3 scope is fully defined in Section 19.
+
+**Context notes:**
+- `public partial class Program { }` at the bottom of Program.cs exists specifically for WebApplicationFactory
+- Tests will need a real Postgres instance (Testcontainers recommended) and either a real MinIO or a mock IStorageService
+- Workers (ExpiryWorker, CleanupWorker) should be tested by resolving them from DI scope and calling ExecuteAsync directly — do NOT rely on the timer
+- All 15 test scenarios are listed in Section 19 with exact expected state transitions
+- GenerateOtpCommand is the ONLY command that does NOT call JobStateMachine.Transition — it directly mutates OTP fields; job stays in Paid state

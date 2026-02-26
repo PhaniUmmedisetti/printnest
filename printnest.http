@@ -24,7 +24,6 @@
 @storeId   = store_supermart_01
 @deviceId  = dev_supermart_abc12345
 @jobId     = paste-job-id-here
-@objectKey = paste-object-key-here
 
 ###
 
@@ -88,8 +87,8 @@ X-Admin-Key: {{adminKey}}
 # ═════════════════════════════════════════════════════════════════════════════
 
 ### Step 3: Create a print job
-# Response contains: jobId, uploadUrl (presigned MinIO PUT), objectKey
-# Copy jobId and objectKey into @jobId and @objectKey above.
+# Response contains: jobId + upload.url (presigned MinIO PUT URL, 15-min TTL)
+# Copy jobId into @jobId above. Use upload.url in Step 4.
 POST {{baseUrl}}/api/v1/public/printjobs
 Content-Type: application/json
 
@@ -111,12 +110,11 @@ Content-Type: application/json
 ###
 
 ### Step 5: Finalize upload (confirms file is in MinIO, transitions Draft → Uploaded)
+# sha256 is optional — send {} to skip hash verification, or provide the hex SHA256 of your file.
 POST {{baseUrl}}/api/v1/public/printjobs/{{jobId}}/finalize
 Content-Type: application/json
 
-{
-  "objectKey": "{{objectKey}}"
-}
+{}
 
 ###
 
