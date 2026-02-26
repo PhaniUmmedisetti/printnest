@@ -1007,23 +1007,23 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 **Date:** 2026-02-26
 
 **Completed this session:**
-- Phase 1: Full backend foundation (all entities, commands, workers, middleware, controllers, migrations)
-- Phase 1 audit: fixed 3 bugs (MapWhen→UseWhen, IsConcurrencyToken, OtpAttempts++)
-- Code review: fixed 7 more issues (pre-payment expiry, DownloadFile status check, CleanupWorker DeletePending clause, AdminAuth comment, MetaJson rate-limit anchoring, heartbeat audit flood, OtpHash clearing on Expired)
-- Phase 2: provision-device.sh, simulate-device.sh, printnest.http (complete REST test file), CLAUDE.md updated
-- HANDOFF.md deep audit: fixed 6 gaps (stores projection, docker-compose __ naming table, INTERNAL_ERROR inline note, objectKey bug in printnest.http, GenerateOtp state machine note, pricing per-copy flat rate)
-- printnest.http cleaned: removed dead @objectKey variable, fixed Step 3 comment, fixed Step 5 body (was sending wrong field)
-- Session bookmark protocol added to HANDOFF.md
+- Created `infra/.env` from template and generated local secrets for Postgres/MinIO/JWT/Admin key
+- Fixed Docker build reliability: `Dockerfile` now restores/publishes `printnest.csproj` explicitly
+- Added `.dockerignore` to exclude `bin/`, `obj/`, `.git/`, editor folders, and `infra/.env`
+- Started local stack with `docker compose --env-file infra/.env up -d --build`
+- Verified runtime health: API up on `http://localhost:5000`, Postgres healthy on `5432`, MinIO healthy on `9000/9001`
+- Ran smoke test against API (`POST /api/v1/public/printjobs`) and confirmed DB write in `print_jobs`
+- Committed Docker setup fixes: `43380f0` (`fix docker setup`)
 
-**Stopped at:** All files clean. No work in flight. Ready to start Phase 3 fresh.
+**Stopped at:** Runtime is up and validated. Project state is clean with no uncommitted changes.
 
-**Next step:** Phase 3 — Integration tests (xUnit + WebApplicationFactory). Start with the happy-path test: full job lifecycle Draft→Uploaded→Quoted→Paid→Released→Downloading→Printing→Completed→Deleted. See Section 19 in this file for all 15 test scenarios.
+**Next step:** Run `printnest.http` end-to-end (public + device/admin flow) and confirm each transition, then start Phase 3 integration tests (Section 19) beginning with the happy-path lifecycle test.
 
-**Pending decisions:** None — Phase 3 scope is fully defined in Section 19.
+**Pending decisions:** None blocking. Optional decision: use real MinIO in integration tests via Testcontainers vs mocking `IStorageService`.
 
 **Context notes:**
-- `public partial class Program { }` at the bottom of Program.cs exists specifically for WebApplicationFactory
-- Tests will need a real Postgres instance (Testcontainers recommended) and either a real MinIO or a mock IStorageService
-- Workers (ExpiryWorker, CleanupWorker) should be tested by resolving them from DI scope and calling ExecuteAsync directly — do NOT rely on the timer
-- All 15 test scenarios are listed in Section 19 with exact expected state transitions
-- GenerateOtpCommand is the ONLY command that does NOT call JobStateMachine.Transition — it directly mutates OTP fields; job stays in Paid state
+- Keep `infra/.env` local only; never commit secrets
+- Docker command that works in this repo: `docker compose --env-file infra/.env up -d --build`
+- If compose warns about obsolete `version` key, it is non-blocking for local run
+- `public partial class Program { }` exists for `WebApplicationFactory` tests
+- `print_jobs` currently contains at least one smoke-test record from local API validation
