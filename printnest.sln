@@ -1,8 +1,12 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "printnest", "printnest.csproj", "{453C5678-7A64-2728-B709-E0E27FDFAD0B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{16121D37-B46F-48A0-B9F8-42B39993C9CA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrintNest.IntegrationTests", "tests\PrintNest.IntegrationTests\PrintNest.IntegrationTests.csproj", "{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,11 +18,18 @@ Global
 		{453C5678-7A64-2728-B709-E0E27FDFAD0B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{453C5678-7A64-2728-B709-E0E27FDFAD0B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{453C5678-7A64-2728-B709-E0E27FDFAD0B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {7C071EF3-CCC0-4AD1-A170-90DA2313A145}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{2BE66724-83F9-4AB9-8CA8-C560E1FD0A81} = {16121D37-B46F-48A0-B9F8-42B39993C9CA}
 	EndGlobalSection
 EndGlobal

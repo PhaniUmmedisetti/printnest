@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PrintNest.Application.Interfaces;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.Errors;
@@ -35,6 +36,7 @@ public sealed class ReleaseJobCommand
     private readonly IOtpService _otp;
     private readonly ITokenService _token;
     private readonly IAuditService _audit;
+    private readonly IServiceProvider _services;
 
     private const int MaxAttemptsPerJob = 6;
     private const int MaxAttemptsPerMinutePerDevice = 6;
@@ -44,12 +46,14 @@ public sealed class ReleaseJobCommand
         AppDbContext db,
         IOtpService otp,
         ITokenService token,
-        IAuditService audit)
+        IAuditService audit,
+        IServiceProvider services)
     {
         _db = db;
         _otp = otp;
         _token = token;
         _audit = audit;
+        _services = services;
     }
 
     public sealed record Input(
@@ -78,10 +82,6 @@ public sealed class ReleaseJobCommand
         // ── Rate limit: per device per minute ─────────────────────
         // Count recent release attempts from this device in the last 60 seconds
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        // Use a field-anchored JSON substring match to avoid false matches.
-        // e.g. dev_abc must not match inside dev_abc123. The pattern
-        // "deviceId":"dev_abc" is unique within our serialized JSON format.
-        var deviceIdJsonFragment = $"\"deviceId\":\"{input.DeviceId}\"";
         // MetaJson is stored as jsonb in Postgres. Filtering by substring on jsonb can
         // translate to unsupported SQL operators, so we narrow in SQL first, then match in memory.
         var recentAttemptMeta = await _db.AuditEvents
@@ -92,7 +92,7 @@ public sealed class ReleaseJobCommand
             .Select(e => e.MetaJson!)
             .ToListAsync();
 
-        var recentAttempts = recentAttemptMeta.Count(meta => meta.Contains(deviceIdJsonFragment, StringComparison.Ordinal));
+        var recentAttempts = recentAttemptMeta.Count(meta => IsOtpFailureForDevice(meta, input.DeviceId));
 
         if (recentAttempts >= MaxAttemptsPerMinutePerDevice)
             throw new DomainException(ErrorCodes.OtpRateLimited, "Invalid code.", httpStatus: 429);
@@ -150,6 +150,10 @@ public sealed class ReleaseJobCommand
         });
 
         // ── Persist (all changes atomic) ──────────────────────────
+        var concurrencyHook = _services.GetService<IReleaseConcurrencyTestHook>();
+        if (concurrencyHook is not null)
+            await concurrencyHook.BeforeSaveAsync(job.JobId, input.DeviceId);
+
         try
         {
             await _db.SaveChangesAsync();
@@ -188,6 +192,22 @@ public sealed class ReleaseJobCommand
         catch
         {
             return new JobSummary(1, "BW", job.PriceCents, job.Currency);
+        }
+    }
+
+    private static bool IsOtpFailureForDevice(string metaJson, string deviceId)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(metaJson);
+            if (!doc.RootElement.TryGetProperty("deviceId", out var did))
+                return false;
+
+            return string.Equals(did.GetString(), deviceId, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
         }
     }
 }

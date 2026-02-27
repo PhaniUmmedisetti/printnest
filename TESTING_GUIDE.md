@@ -168,3 +168,24 @@ Current MVP hardware is HP DeskJet 2338 over USB via Raspberry Pi + CUPS.
 - Call Step 11 multiple times and verify OTP changes
 - Try status checks at each stage (Step 12)
 - Register another device and test ownership/security behavior
+
+## 8) Phase 3 integration tests (xUnit + Testcontainers)
+
+These tests run the full 15-scenario Phase 3 matrix using:
+- `WebApplicationFactory<Program>`
+- Postgres Testcontainer
+- MinIO Testcontainer
+
+Prerequisite:
+- Docker Desktop running before test execution
+
+Run only integration tests:
+
+```powershell
+dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj
+```
+
+Notes:
+- Containers are shared for the test run and DB/bucket are reset before each test.
+- Background workers are not run as timed hosted services in tests; tests invoke one-shot worker methods for deterministic assertions.
+- If Docker is unavailable, the integration suite will fail to start containers.

@@ -47,7 +47,7 @@ public sealed class CleanupWorker : BackgroundService
         {
             try
             {
-                await RunAsync(stoppingToken);
+                await RunOnceAsync(stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -58,7 +58,7 @@ public sealed class CleanupWorker : BackgroundService
         }
     }
 
-    private async Task RunAsync(CancellationToken ct)
+    internal async Task RunOnceAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
