@@ -114,4 +114,98 @@ public sealed class Phase4PrinterHealthTests : IAsyncLifetime
         deviceAlerts.Should().Contain("DOOR_OPEN");
         deviceAlerts.Should().Contain("INK_EMPTY");
     }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Release_Is_Blocked_When_Printer_Has_Blocking_Consumable_Alert()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+
+        using var heartbeatRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/heartbeat",
+            device.DeviceId,
+            device.SharedSecret,
+            new
+            {
+                storeId = device.StoreId,
+                capabilitiesJson = "{}",
+                printerHealth = new
+                {
+                    connectionState = "online",
+                    operationalState = "idle",
+                    paperOut = false,
+                    doorOpen = false,
+                    cartridgeMissing = false,
+                    inkState = "empty"
+                }
+            });
+        using var heartbeatResponse = await client.SendAsync(heartbeatRequest);
+        heartbeatResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var releaseRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/release",
+            device.DeviceId,
+            device.SharedSecret,
+            new { otp = job.Otp, storeId = device.StoreId });
+        using var releaseResponse = await client.SendAsync(releaseRequest);
+        releaseResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(releaseResponse)).Should().Be("PRINTER_NOT_READY");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Device_Alerts_Endpoint_Contains_Escalation_And_InkPrediction_Metadata()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+
+        using var heartbeatRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/heartbeat",
+            device.DeviceId,
+            device.SharedSecret,
+            new
+            {
+                storeId = device.StoreId,
+                capabilitiesJson = "{}",
+                printerHealth = new
+                {
+                    connectionState = "online",
+                    operationalState = "idle",
+                    paperOut = false,
+                    doorOpen = false,
+                    cartridgeMissing = false,
+                    inkState = "low"
+                }
+            });
+        using var heartbeatResponse = await client.SendAsync(heartbeatRequest);
+        heartbeatResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var alertsRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/devices/alerts");
+        alertsRequest.Headers.Add("X-Admin-Key", _fixture.AdminApiKey);
+        using var alertsResponse = await client.SendAsync(alertsRequest);
+        alertsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await alertsResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var inkLowAlert = payload.EnumerateArray()
+            .First(a =>
+                a.GetProperty("deviceId").GetString() == device.DeviceId &&
+                a.GetProperty("alertCode").GetString() == "INK_LOW");
+
+        inkLowAlert.GetProperty("severity").GetString().Should().Be("WARNING");
+        inkLowAlert.GetProperty("isBlocking").GetBoolean().Should().BeFalse();
+        inkLowAlert.TryGetProperty("escalatesAtUtc", out var escalatesAtUtc).Should().BeTrue();
+        escalatesAtUtc.ValueKind.Should().Be(JsonValueKind.String);
+        inkLowAlert.TryGetProperty("inkPrediction", out var inkPrediction).Should().BeTrue();
+        inkPrediction.ValueKind.Should().Be(JsonValueKind.Object);
+        inkPrediction.GetProperty("remainingMinutesUpper").GetInt32().Should().BeGreaterThan(0);
+    }
 }

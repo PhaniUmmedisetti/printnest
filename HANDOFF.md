@@ -1042,33 +1042,38 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 **Date:** 2026-02-28
 
 **Completed this session:**
-- Fixed integration test warning source by excluding `tests/**` from `Content/None/EmbeddedResource` in `printnest.csproj` (now Phase 3 test command runs without MSBuild warning noise).
-- Implemented Phase 4 backend printer-health telemetry foundation:
-  - extended `Device` entity with normalized printer health fields (`PrinterModel`, connection/operational states, paper/door/cartridge flags, ink state, raw status, status timestamp)
-  - mapped all new columns/index in `AppDbContext`
-  - generated EF migration `20260228200632_AddPrinterHealthTelemetry`.
-- Extended device heartbeat ingestion:
-  - `POST /api/v1/device/heartbeat` now accepts optional `printerHealth` object
-  - normalizes state values to bounded enums (`ONLINE/OFFLINE/UNKNOWN`, `IDLE/PRINTING/ERROR/UNKNOWN`, `OK/LOW/VERY_LOW/EMPTY/UNKNOWN`).
-- Extended admin monitoring APIs:
-  - `GET /api/v1/admin/devices` now returns normalized `printerHealth` and computed `alerts`
-  - new `GET /api/v1/admin/devices/alerts` returns active alert feed for staff UI.
-- Added Phase 4 integration coverage:
-  - `Phase4PrinterHealthTests.Heartbeat_Persists_PrinterHealth_For_Admin_Devices_View`
-  - `Phase4PrinterHealthTests.Device_Alerts_Endpoint_Returns_Printer_Alerts`.
+- Added AI-agent operating/runbook docs:
+  - created `AGENTS.md` as the primary AI workflow file
+  - updated `HANDOFF.md` session protocol to reference `AGENTS.md`
+  - refreshed `CLAUDE.md` to clean ASCII + current Phase 3/4 context.
+- Implemented Phase 4 backend hardening for real-time staff operations:
+  - added device telemetry history fields (`*_SinceUtc`, ink transition timestamps, learned low->empty baseline stats)
+  - extended heartbeat logic to maintain alert-age timestamps and update low->empty duration baseline when ink reaches `EMPTY`
+  - upgraded admin alert payloads with:
+    - severity tiers: `WARNING | CRITICAL | BLOCKING`
+    - escalation metadata: `firstObservedAtUtc`, `escalatesAtUtc`, `isEscalated`
+    - ink prediction window (`inkPrediction`) with confidence/samples.
+- Added release safeguard in `ReleaseJobCommand`:
+  - OTP release now returns `PRINTER_NOT_READY` (409) when device has blocking consumable states (`INK_EMPTY`, `PAPER_OUT`, `CARTRIDGE_MISSING`, `DOOR_OPEN`).
+- Added EF migration:
+  - `20260228214501_AddAlertEscalationAndInkPrediction`.
+- Expanded integration coverage:
+  - release blocked when ink is empty
+  - alerts endpoint returns escalation + ink prediction metadata.
 - Validation completed with Docker running:
   - `dotnet build printnest.sln` -> success, 0 warnings
-  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 17, Failed 0**.
+  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 19, Failed 0**.
 
-**Stopped at:** Phase 4 backend changes are implemented and validated locally but **not yet committed**. Working tree has modified files + new migration + new Phase 4 tests.
+**Stopped at:** All backend changes implemented and validated locally; ready to finalize commit/push.
 
-**Next step:** Commit Phase 4 backend work (telemetry schema, heartbeat parsing, admin health/alerts endpoints, new integration tests), then begin staff dashboard UI implementation that consumes `/api/v1/admin/devices` and `/api/v1/admin/devices/alerts`.
+**Next step:** Build the staff PWA (real-time alert dashboard) on top of `/api/v1/admin/devices` and `/api/v1/admin/devices/alerts`, then add live update transport (SignalR/WebSocket with polling fallback).
 
-**Pending decisions:** None blocking for backend. UI decision still pending: staff dashboard in existing admin surface vs separate standalone staff web app.
+**Pending decisions:**
+- Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
+- Real-time delivery approach for staff PWA first release: SignalR only vs SignalR + Web Push.
 
 **Context notes:**
-- Phase 3 commit is `cd3ba8e`; Phase 4 work is currently uncommitted on top.
-- `AdminController.cs` was rewritten cleanly during this session to resolve accidental duplicate-content corruption and include new alert logic.
-- Integration suite now includes both Phase 3 and initial Phase 4 tests (17 total).
-- Runtime logs showing `Domain error ...` during tests are expected for negative test cases and do not indicate failures.
+- Current test baseline: integration suite total is 19 and green.
+- Runtime `Domain error ...` logs during tests are expected negative-case assertions.
+- `dotnet ef` emitted a tooling-version advisory (EF tools 7.x vs runtime 8.x) but migration/build/tests succeeded.
 - `infra/.env` secrets remain local-only and must not be committed.

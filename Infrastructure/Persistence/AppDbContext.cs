@@ -124,11 +124,20 @@ public sealed class AppDbContext : DbContext
             // Normalized printer health telemetry (reported by device heartbeat)
             e.Property(x => x.PrinterModel).HasColumnName("printer_model").HasMaxLength(256);
             e.Property(x => x.PrinterConnectionState).HasColumnName("printer_connection_state").HasMaxLength(32);
+            e.Property(x => x.PrinterOfflineSinceUtc).HasColumnName("printer_offline_since_utc");
             e.Property(x => x.PrinterOperationalState).HasColumnName("printer_operational_state").HasMaxLength(32);
+            e.Property(x => x.PrinterErrorSinceUtc).HasColumnName("printer_error_since_utc");
             e.Property(x => x.PrinterPaperOut).HasColumnName("printer_paper_out");
+            e.Property(x => x.PrinterPaperOutSinceUtc).HasColumnName("printer_paper_out_since_utc");
             e.Property(x => x.PrinterDoorOpen).HasColumnName("printer_door_open");
+            e.Property(x => x.PrinterDoorOpenSinceUtc).HasColumnName("printer_door_open_since_utc");
             e.Property(x => x.PrinterCartridgeMissing).HasColumnName("printer_cartridge_missing");
+            e.Property(x => x.PrinterCartridgeMissingSinceUtc).HasColumnName("printer_cartridge_missing_since_utc");
             e.Property(x => x.PrinterInkState).HasColumnName("printer_ink_state").HasMaxLength(32);
+            e.Property(x => x.PrinterInkStateChangedAtUtc).HasColumnName("printer_ink_state_changed_at_utc");
+            e.Property(x => x.PrinterInkLowSinceUtc).HasColumnName("printer_ink_low_since_utc");
+            e.Property(x => x.PrinterLowToEmptyAvgMinutes).HasColumnName("printer_low_to_empty_avg_minutes");
+            e.Property(x => x.PrinterLowToEmptySamples).HasColumnName("printer_low_to_empty_samples").HasDefaultValue(0);
             e.Property(x => x.PrinterRawStatusJson).HasColumnName("printer_raw_status_json").HasColumnType("jsonb");
             e.Property(x => x.PrinterStatusUpdatedAtUtc).HasColumnName("printer_status_updated_at_utc");
 

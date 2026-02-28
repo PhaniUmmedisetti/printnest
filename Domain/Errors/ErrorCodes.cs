@@ -34,6 +34,9 @@ public static class ErrorCodes
     /// <summary>Device is unknown, signature is invalid, or timestamp is out of range. Deliberately generic.</summary>
     public const string DeviceUnauthorized = "DEVICE_UNAUTHORIZED";
 
+    /// <summary>Device is authenticated, but printer is not in a state that can accept new releases.</summary>
+    public const string PrinterNotReady = "PRINTER_NOT_READY";
+
     // ── File token errors ─────────────────────────────────────────
     /// <summary>File token signature is invalid or the token is malformed.</summary>
     public const string TokenInvalid = "TOKEN_INVALID";

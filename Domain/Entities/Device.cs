@@ -49,15 +49,28 @@ public sealed class Device
 
     /// <summary>True if paper is out.</summary>
     public bool? PrinterPaperOut { get; set; }
+    public DateTime? PrinterPaperOutSinceUtc { get; set; }
 
     /// <summary>True if cover/door is open.</summary>
     public bool? PrinterDoorOpen { get; set; }
+    public DateTime? PrinterDoorOpenSinceUtc { get; set; }
 
     /// <summary>True if cartridge is missing.</summary>
     public bool? PrinterCartridgeMissing { get; set; }
+    public DateTime? PrinterCartridgeMissingSinceUtc { get; set; }
 
     /// <summary>Ink warning state: OK | LOW | VERY_LOW | EMPTY | UNKNOWN.</summary>
     public string? PrinterInkState { get; set; }
+    public DateTime? PrinterInkStateChangedAtUtc { get; set; }
+    public DateTime? PrinterInkLowSinceUtc { get; set; }
+    public double? PrinterLowToEmptyAvgMinutes { get; set; }
+    public int PrinterLowToEmptySamples { get; set; }
+
+    /// <summary>When connection entered OFFLINE state.</summary>
+    public DateTime? PrinterOfflineSinceUtc { get; set; }
+
+    /// <summary>When operational state entered ERROR state.</summary>
+    public DateTime? PrinterErrorSinceUtc { get; set; }
 
     /// <summary>Raw backend-agnostic status payload from agent for debugging.</summary>
     public string? PrinterRawStatusJson { get; set; }

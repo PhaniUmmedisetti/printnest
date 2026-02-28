@@ -97,6 +97,20 @@ public sealed class ReleaseJobCommand
         if (recentAttempts >= MaxAttemptsPerMinutePerDevice)
             throw new DomainException(ErrorCodes.OtpRateLimited, "Invalid code.", httpStatus: 429);
 
+        // Block release on hard consumable failures so the kiosk does not accept jobs it cannot print.
+        var device = await _db.Devices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.DeviceId == input.DeviceId && d.IsActive);
+
+        var blockingCode = GetBlockingAlertCode(device);
+        if (blockingCode is not null)
+        {
+            throw new DomainException(
+                ErrorCodes.PrinterNotReady,
+                $"Printer not ready ({blockingCode}). Please replace consumables and retry.",
+                httpStatus: 409);
+        }
+
         // ── Find a Paid job with a non-expired OTP ─────────────────
         // We load all Paid jobs with active OTPs and check each one.
         // This avoids leaking which job IDs exist via timing differences.
@@ -209,5 +223,15 @@ public sealed class ReleaseJobCommand
         {
             return false;
         }
+    }
+
+    private static string? GetBlockingAlertCode(Domain.Entities.Device? device)
+    {
+        if (device is null) return null;
+        if (device.PrinterPaperOut is true) return "PAPER_OUT";
+        if (device.PrinterCartridgeMissing is true) return "CARTRIDGE_MISSING";
+        if (device.PrinterDoorOpen is true) return "DOOR_OPEN";
+        if (string.Equals(device.PrinterInkState, "EMPTY", StringComparison.OrdinalIgnoreCase)) return "INK_EMPTY";
+        return null;
     }
 }

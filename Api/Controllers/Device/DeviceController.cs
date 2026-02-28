@@ -65,6 +65,13 @@ public sealed class DeviceController : ControllerBase
         if (req.CapabilitiesJson is not null) device.CapabilitiesJson = req.CapabilitiesJson;
         if (req.PrinterHealth is not null)
         {
+            var previousConnectionState = device.PrinterConnectionState;
+            var previousOperationalState = device.PrinterOperationalState;
+            var previousPaperOut = device.PrinterPaperOut;
+            var previousDoorOpen = device.PrinterDoorOpen;
+            var previousCartridgeMissing = device.PrinterCartridgeMissing;
+            var previousInkState = device.PrinterInkState;
+
             device.PrinterModel = req.PrinterHealth.PrinterModel?.Trim();
             device.PrinterConnectionState = NormalizePrinterConnectionState(req.PrinterHealth.ConnectionState);
             device.PrinterOperationalState = NormalizePrinterOperationalState(req.PrinterHealth.OperationalState);
@@ -74,6 +81,59 @@ public sealed class DeviceController : ControllerBase
             device.PrinterInkState = NormalizePrinterInkState(req.PrinterHealth.InkState);
             device.PrinterRawStatusJson = req.PrinterHealth.RawStatusJson;
             device.PrinterStatusUpdatedAtUtc = now;
+
+            device.PrinterOfflineSinceUtc = TrackActiveSince(
+                previousConnectionState,
+                device.PrinterConnectionState,
+                activeState: "OFFLINE",
+                currentSince: device.PrinterOfflineSinceUtc,
+                nowUtc: now);
+
+            device.PrinterErrorSinceUtc = TrackActiveSince(
+                previousOperationalState,
+                device.PrinterOperationalState,
+                activeState: "ERROR",
+                currentSince: device.PrinterErrorSinceUtc,
+                nowUtc: now);
+
+            device.PrinterPaperOutSinceUtc = TrackActiveSince(
+                previousPaperOut,
+                device.PrinterPaperOut,
+                currentSince: device.PrinterPaperOutSinceUtc,
+                nowUtc: now);
+
+            device.PrinterDoorOpenSinceUtc = TrackActiveSince(
+                previousDoorOpen,
+                device.PrinterDoorOpen,
+                currentSince: device.PrinterDoorOpenSinceUtc,
+                nowUtc: now);
+
+            device.PrinterCartridgeMissingSinceUtc = TrackActiveSince(
+                previousCartridgeMissing,
+                device.PrinterCartridgeMissing,
+                currentSince: device.PrinterCartridgeMissingSinceUtc,
+                nowUtc: now);
+
+            if (!string.Equals(previousInkState, device.PrinterInkState, StringComparison.OrdinalIgnoreCase))
+            {
+                device.PrinterInkStateChangedAtUtc = now;
+            }
+
+            var currentInkState = device.PrinterInkState ?? "UNKNOWN";
+            var wasLowFamily = IsLowFamily(previousInkState);
+            var isLowFamily = IsLowFamily(currentInkState);
+
+            if (isLowFamily && !wasLowFamily)
+                device.PrinterInkLowSinceUtc = now;
+
+            if (!isLowFamily && !string.Equals(currentInkState, "EMPTY", StringComparison.OrdinalIgnoreCase))
+                device.PrinterInkLowSinceUtc = null;
+
+            if (string.Equals(currentInkState, "EMPTY", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(previousInkState, "EMPTY", StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateLowToEmptyBaseline(device, now);
+            }
         }
 
         // LastHeartbeatUtc on the Device entity already records device liveness.
@@ -239,6 +299,69 @@ public sealed class DeviceController : ControllerBase
     {
         return HttpContext.Items["AuthenticatedDevice"] as Device
             ?? throw new DomainException(ErrorCodes.DeviceUnauthorized, "Unauthorized.", 401);
+    }
+
+    private static DateTime? TrackActiveSince(
+        string? previousState,
+        string? currentState,
+        string activeState,
+        DateTime? currentSince,
+        DateTime nowUtc)
+    {
+        var wasActive = string.Equals(previousState, activeState, StringComparison.OrdinalIgnoreCase);
+        var isActive = string.Equals(currentState, activeState, StringComparison.OrdinalIgnoreCase);
+
+        if (isActive && !wasActive)
+            return nowUtc;
+
+        if (!isActive)
+            return null;
+
+        return currentSince ?? nowUtc;
+    }
+
+    private static DateTime? TrackActiveSince(
+        bool? previousValue,
+        bool? currentValue,
+        DateTime? currentSince,
+        DateTime nowUtc)
+    {
+        var wasActive = previousValue is true;
+        var isActive = currentValue is true;
+
+        if (isActive && !wasActive)
+            return nowUtc;
+
+        if (!isActive)
+            return null;
+
+        return currentSince ?? nowUtc;
+    }
+
+    private static bool IsLowFamily(string? inkState)
+    {
+        return string.Equals(inkState, "LOW", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(inkState, "VERY_LOW", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void UpdateLowToEmptyBaseline(Device device, DateTime nowUtc)
+    {
+        if (device.PrinterInkLowSinceUtc is null)
+            return;
+
+        var elapsedMinutes = (nowUtc - device.PrinterInkLowSinceUtc.Value).TotalMinutes;
+        if (elapsedMinutes <= 0)
+            return;
+
+        var samples = device.PrinterLowToEmptySamples;
+        var currentAvg = device.PrinterLowToEmptyAvgMinutes;
+
+        var newAvg = samples > 0 && currentAvg is not null
+            ? ((currentAvg.Value * samples) + elapsedMinutes) / (samples + 1)
+            : elapsedMinutes;
+
+        device.PrinterLowToEmptyAvgMinutes = newAvg;
+        device.PrinterLowToEmptySamples = samples + 1;
     }
 
     private static string NormalizePrinterConnectionState(string? state)
