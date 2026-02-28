@@ -29,6 +29,11 @@ be able to pick up the project in full fidelity without reading any other file f
 
 Update the bookmark section in-place â€” overwrite the previous bookmark. Only the latest matters.
 
+**If the user asks for "bookmark then commit" (or equivalent):**
+- Update `## CURRENT BOOKMARK` first.
+- Include `HANDOFF.md` in the SAME commit as the code changes from that session.
+- Do not split bookmark and code into separate commits unless the user explicitly asks for separate commits.
+
 ---
 
 ## 1. What Is This Product
@@ -1030,26 +1035,36 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-02-26
+**Date:** 2026-02-28
 
 **Completed this session:**
-- Executed end-to-end local validation: admin setup, public job lifecycle, OTP generation, device simulation, and successful completion flow
-- Confirmed working device flow through all transitions: Released -> Downloading -> Printing -> Completed -> Deleted (cleanup worker)
-- Fixed `ReleaseJobCommand` rate-limit query bug for Postgres JSONB (`jsonb ~~ jsonb` failure) by narrowing in SQL and matching in memory
-- Fixed OTP generation bug in `OtpService` by adding a random salt to Argon2 config (previous hashes were truncated/invalid for verify)
-- Fixed JWT validation bug in `JwtTokenService` by handling mapped claims (`sub`/`jti` fallbacks)
-- Normalized `tools/simulate-device.sh` line endings so Bash runs correctly on Windows environments
-- Rebuilt `printnest.http` into a clean, strict run-order test flow and removed broken variable collisions
-- Added `TESTING_GUIDE.md` with step-by-step testing instructions, inputs, expected outputs, and troubleshooting
+- Fixed integration test warning source by excluding `tests/**` from `Content/None/EmbeddedResource` in `printnest.csproj` (now Phase 3 test command runs without MSBuild warning noise).
+- Implemented Phase 4 backend printer-health telemetry foundation:
+  - extended `Device` entity with normalized printer health fields (`PrinterModel`, connection/operational states, paper/door/cartridge flags, ink state, raw status, status timestamp)
+  - mapped all new columns/index in `AppDbContext`
+  - generated EF migration `20260228200632_AddPrinterHealthTelemetry`.
+- Extended device heartbeat ingestion:
+  - `POST /api/v1/device/heartbeat` now accepts optional `printerHealth` object
+  - normalizes state values to bounded enums (`ONLINE/OFFLINE/UNKNOWN`, `IDLE/PRINTING/ERROR/UNKNOWN`, `OK/LOW/VERY_LOW/EMPTY/UNKNOWN`).
+- Extended admin monitoring APIs:
+  - `GET /api/v1/admin/devices` now returns normalized `printerHealth` and computed `alerts`
+  - new `GET /api/v1/admin/devices/alerts` returns active alert feed for staff UI.
+- Added Phase 4 integration coverage:
+  - `Phase4PrinterHealthTests.Heartbeat_Persists_PrinterHealth_For_Admin_Devices_View`
+  - `Phase4PrinterHealthTests.Device_Alerts_Endpoint_Returns_Printer_Alerts`.
+- Validation completed with Docker running:
+  - `dotnet build printnest.sln` -> success, 0 warnings
+  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 17, Failed 0**.
 
-**Stopped at:** Runtime flow is validated end-to-end and fixes are committed. MVP reminder added for pending printer-monitoring feature.
+**Stopped at:** Phase 4 backend changes are implemented and validated locally but **not yet committed**. Working tree has modified files + new migration + new Phase 4 tests.
 
-**Next step:** Begin Phase 3 integration tests (Section 19), starting with the happy-path lifecycle test in xUnit + WebApplicationFactory, then implement MVP state-based printer monitoring for HP DeskJet 2338.
+**Next step:** Commit Phase 4 backend work (telemetry schema, heartbeat parsing, admin health/alerts endpoints, new integration tests), then begin staff dashboard UI implementation that consumes `/api/v1/admin/devices` and `/api/v1/admin/devices/alerts`.
 
-**Pending decisions:** None blocking. Monitoring scope is fixed to state-based telemetry only (no percentage ink telemetry for MVP).
+**Pending decisions:** None blocking for backend. UI decision still pending: staff dashboard in existing admin surface vs separate standalone staff web app.
 
 **Context notes:**
-- For host-side Step 7 upload in `printnest.http`, replace `https://minio:9000` with `http://localhost:9000` in `@uploadUrl`
-- Existing older test jobs may remain in non-terminal states from pre-fix runs; use fresh jobs for validation
-- `infra/.env` secrets are local-only and must not be committed
-- MVP pending feature reminder: add printer status + ink warning state monitoring for HP DeskJet 2338 (USB/CUPS); do not assume exact ink percentages
+- Phase 3 commit is `cd3ba8e`; Phase 4 work is currently uncommitted on top.
+- `AdminController.cs` was rewritten cleanly during this session to resolve accidental duplicate-content corruption and include new alert logic.
+- Integration suite now includes both Phase 3 and initial Phase 4 tests (17 total).
+- Runtime logs showing `Domain error ...` during tests are expected for negative test cases and do not indicate failures.
+- `infra/.env` secrets remain local-only and must not be committed.

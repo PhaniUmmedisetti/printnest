@@ -120,12 +120,25 @@ public sealed class AppDbContext : DbContext
 
             e.Property(x => x.LastHeartbeatUtc).HasColumnName("last_heartbeat_utc");
             e.Property(x => x.CapabilitiesJson).HasColumnName("capabilities_json").HasColumnType("jsonb");
+
+            // Normalized printer health telemetry (reported by device heartbeat)
+            e.Property(x => x.PrinterModel).HasColumnName("printer_model").HasMaxLength(256);
+            e.Property(x => x.PrinterConnectionState).HasColumnName("printer_connection_state").HasMaxLength(32);
+            e.Property(x => x.PrinterOperationalState).HasColumnName("printer_operational_state").HasMaxLength(32);
+            e.Property(x => x.PrinterPaperOut).HasColumnName("printer_paper_out");
+            e.Property(x => x.PrinterDoorOpen).HasColumnName("printer_door_open");
+            e.Property(x => x.PrinterCartridgeMissing).HasColumnName("printer_cartridge_missing");
+            e.Property(x => x.PrinterInkState).HasColumnName("printer_ink_state").HasMaxLength(32);
+            e.Property(x => x.PrinterRawStatusJson).HasColumnName("printer_raw_status_json").HasColumnType("jsonb");
+            e.Property(x => x.PrinterStatusUpdatedAtUtc).HasColumnName("printer_status_updated_at_utc");
+
             e.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             e.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             e.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
 
             e.HasIndex(x => x.StoreId).HasDatabaseName("ix_devices_store_id");
             e.HasIndex(x => x.IsActive).HasDatabaseName("ix_devices_is_active");
+            e.HasIndex(x => x.PrinterStatusUpdatedAtUtc).HasDatabaseName("ix_devices_printer_status_updated");
         });
     }
 

@@ -57,12 +57,24 @@ public sealed class DeviceController : ControllerBase
     public async Task<IActionResult> Heartbeat([FromBody] HeartbeatRequest req)
     {
         var device = GetAuthenticatedDevice();
-
-        device.LastHeartbeatUtc = DateTime.UtcNow;
-        device.UpdatedAtUtc = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        device.LastHeartbeatUtc = now;
+        device.UpdatedAtUtc = now;
 
         if (req.StoreId is not null) device.StoreId = req.StoreId;
         if (req.CapabilitiesJson is not null) device.CapabilitiesJson = req.CapabilitiesJson;
+        if (req.PrinterHealth is not null)
+        {
+            device.PrinterModel = req.PrinterHealth.PrinterModel?.Trim();
+            device.PrinterConnectionState = NormalizePrinterConnectionState(req.PrinterHealth.ConnectionState);
+            device.PrinterOperationalState = NormalizePrinterOperationalState(req.PrinterHealth.OperationalState);
+            device.PrinterPaperOut = req.PrinterHealth.PaperOut;
+            device.PrinterDoorOpen = req.PrinterHealth.DoorOpen;
+            device.PrinterCartridgeMissing = req.PrinterHealth.CartridgeMissing;
+            device.PrinterInkState = NormalizePrinterInkState(req.PrinterHealth.InkState);
+            device.PrinterRawStatusJson = req.PrinterHealth.RawStatusJson;
+            device.PrinterStatusUpdatedAtUtc = now;
+        }
 
         // LastHeartbeatUtc on the Device entity already records device liveness.
         // No AuditEvent row — heartbeats are routine telemetry, not security-relevant events.
@@ -228,11 +240,56 @@ public sealed class DeviceController : ControllerBase
         return HttpContext.Items["AuthenticatedDevice"] as Device
             ?? throw new DomainException(ErrorCodes.DeviceUnauthorized, "Unauthorized.", 401);
     }
+
+    private static string NormalizePrinterConnectionState(string? state)
+    {
+        if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
+        return state.Trim().ToUpperInvariant() switch
+        {
+            "ONLINE" => "ONLINE",
+            "OFFLINE" => "OFFLINE",
+            _ => "UNKNOWN"
+        };
+    }
+
+    private static string NormalizePrinterOperationalState(string? state)
+    {
+        if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
+        return state.Trim().ToUpperInvariant() switch
+        {
+            "IDLE" => "IDLE",
+            "PRINTING" => "PRINTING",
+            "ERROR" => "ERROR",
+            _ => "UNKNOWN"
+        };
+    }
+
+    private static string NormalizePrinterInkState(string? state)
+    {
+        if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
+        return state.Trim().ToUpperInvariant() switch
+        {
+            "OK" => "OK",
+            "LOW" => "LOW",
+            "VERY_LOW" => "VERY_LOW",
+            "EMPTY" => "EMPTY",
+            _ => "UNKNOWN"
+        };
+    }
 }
 
 // ── Request models ────────────────────────────────────────────────────────────
 
-public sealed record HeartbeatRequest(string? StoreId, string? CapabilitiesJson);
+public sealed record HeartbeatRequest(string? StoreId, string? CapabilitiesJson, PrinterHealthRequest? PrinterHealth);
+public sealed record PrinterHealthRequest(
+    string? PrinterModel,
+    string? ConnectionState,
+    string? OperationalState,
+    bool? PaperOut,
+    bool? DoorOpen,
+    bool? CartridgeMissing,
+    string? InkState,
+    string? RawStatusJson);
 public sealed record ReleaseRequest(string Otp, string? StoreId);
 public sealed record PrintingStartedRequest(string? CupsJobId, string? PrinterName);
 public sealed record CompletedRequest(string? CupsJobId, object? Metrics);

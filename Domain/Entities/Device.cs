@@ -36,6 +36,35 @@ public sealed class Device
     /// </summary>
     public string? CapabilitiesJson { get; set; }
 
+    // â”€â”€ Printer health telemetry (normalized, model-agnostic backend shape) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    /// <summary>Device-reported printer model (for example "HP DeskJet 2338").</summary>
+    public string? PrinterModel { get; set; }
+
+    /// <summary>Connection state: ONLINE | OFFLINE | UNKNOWN.</summary>
+    public string? PrinterConnectionState { get; set; }
+
+    /// <summary>Operational state: IDLE | PRINTING | ERROR | UNKNOWN.</summary>
+    public string? PrinterOperationalState { get; set; }
+
+    /// <summary>True if paper is out.</summary>
+    public bool? PrinterPaperOut { get; set; }
+
+    /// <summary>True if cover/door is open.</summary>
+    public bool? PrinterDoorOpen { get; set; }
+
+    /// <summary>True if cartridge is missing.</summary>
+    public bool? PrinterCartridgeMissing { get; set; }
+
+    /// <summary>Ink warning state: OK | LOW | VERY_LOW | EMPTY | UNKNOWN.</summary>
+    public string? PrinterInkState { get; set; }
+
+    /// <summary>Raw backend-agnostic status payload from agent for debugging.</summary>
+    public string? PrinterRawStatusJson { get; set; }
+
+    /// <summary>When printer telemetry was last updated by heartbeat.</summary>
+    public DateTime? PrinterStatusUpdatedAtUtc { get; set; }
+
     /// <summary>
     /// Soft delete flag. When false, the device is treated as unknown by the auth middleware.
     /// Use this instead of deleting the row to preserve audit history.
