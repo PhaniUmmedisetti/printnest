@@ -1,229 +1,131 @@
-# PrintNest — AI Context File
+﻿# PrintNest - AI Context
 
-This file gives any AI coding assistant (Claude, Codex, Gemini, etc.) everything
-needed to understand and extend this codebase without reading every file.
+This file gives AI coding agents enough context to continue work safely.
+Read this with `AGENTS.md` and `HANDOFF.md`.
 
----
+## Source Priority
+1. `AGENTS.md` (operating rules and workflow)
+2. `HANDOFF.md` (current bookmark and session continuity)
+3. `CLAUDE.md` (architecture and domain reference)
 
-## What This Is
+## Product in Plain Terms
+- Customer uploads a PDF from mobile.
+- Customer pays and gets a 6-digit OTP.
+- At store kiosk, customer enters OTP.
+- Kiosk downloads file, prints it, then cleanup deletes file from storage.
 
-A privacy-first, release-based print network backend.
-
-Users upload PDFs from their phone, pay, and get a 6-digit OTP.
-At a store kiosk (Raspberry Pi + touchscreen), they enter the OTP.
-The file downloads to the Pi, prints via CUPS, then is permanently deleted.
-
-No file ever leaves the user's control. No file is stored after printing.
-
----
+Privacy goal: files are temporary and removed after completion/cleanup.
 
 ## Tech Stack
-
 - .NET 8 Web API
-- PostgreSQL (via EF Core + Npgsql)
-- MinIO (S3-compatible local storage)
-- JWT (file tokens, HS256)
+- PostgreSQL (EF Core + Npgsql)
+- MinIO (S3-compatible object storage)
+- JWT HS256 (file download token)
 - HMAC-SHA256 (device authentication)
 - Argon2id (OTP hashing)
-- Docker Compose (local dev)
+- Docker Compose for local services
 
----
+## Architecture
+Single project (`printnest.csproj`) with folder-layer boundaries.
 
-## Project Structure
+- `Domain/`
+  - Entities (`PrintJob`, `Device`, `Store`, `AuditEvent`, `UsedFileToken`)
+  - Enums (`JobStatus`, `AuditEventType`)
+  - State machine (`JobStateMachine.cs`)
+  - Errors (`DomainException`, `ErrorCodes`)
+- `Application/`
+  - Commands (use-case orchestration)
+  - Interfaces for infrastructure dependencies
+- `Infrastructure/`
+  - EF Core persistence (`AppDbContext`)
+  - Auth services (OTP, JWT, HMAC)
+  - Storage service (MinIO)
+  - Workers (`ExpiryWorker`, `CleanupWorker`)
+- `Api/`
+  - Controllers (Public, Device, Admin)
+  - Middleware (error handling + auth)
 
-Single .csproj, layered by folder:
+## Critical Rule
+Never set `PrintJob.Status` directly.
+Always use:
 
-```
-Domain/           ← Business rules. No dependencies on other layers.
-  Entities/       ← PrintJob, Device, Store, AuditEvent, UsedFileToken
-  Enums/          ← JobStatus, AuditEventType
-  StateMachine/   ← JobStateMachine.cs — ALL state transitions live here
-  Errors/         ← DomainException, ErrorCodes (all API error codes)
-
-Application/      ← Use cases. Depends on Domain + Infrastructure interfaces.
-  Commands/       ← One command class per use case
-  Interfaces/     ← IStorageService, ITokenService, IDeviceAuthService, IOtpService, IAuditService
-
-Infrastructure/   ← External systems. Implements Application interfaces.
-  Persistence/    ← AppDbContext (EF Core), AuditService
-  Auth/           ← HmacDeviceAuthService, JwtTokenService, OtpService
-  Storage/        ← MinioStorageService
-  Workers/        ← ExpiryWorker, CleanupWorker (IHostedService)
-
-Api/              ← HTTP layer. Thin controllers, middleware only.
-  Controllers/
-    Public/       ← Customer endpoints (no auth)
-    Device/       ← Device endpoints (HMAC auth via DeviceAuthMiddleware)
-    Admin/        ← Admin endpoints (API key via AdminAuthMiddleware)
-  Middleware/     ← ErrorHandlingMiddleware, DeviceAuthMiddleware, AdminAuthMiddleware
-```
-
----
-
-## The State Machine (Most Important File)
-
-`Domain/StateMachine/JobStateMachine.cs`
-
-**NEVER set PrintJob.Status directly.** Always call:
 ```csharp
 JobStateMachine.Transition(job, JobStatus.TargetState, actor: "user|device|worker");
 ```
 
-Valid transitions:
-```
-Draft → Uploaded              (user: finalize upload)
-Uploaded → Quoted             (user: request quote)
-Quoted → Paid                 (user: mock pay)
-Paid → Released               (device: OTP validated)
-Released → Downloading        (device: file download started)
-Downloading → Printing        (device: CUPS job submitted)
-Printing → Completed          (device: CUPS success)
-Printing → Failed             (device: CUPS failure)
-Completed → Deleted           (worker: MinIO delete succeeded)
-Failed → Deleted              (worker: MinIO delete succeeded)
-Expired → Deleted             (worker: MinIO delete succeeded)
-Draft → Expired               (worker: abandoned before upload, 24h)
-Uploaded → Expired            (worker: uploaded but never paid, 24h)
-Quoted → Expired              (worker: quoted but never paid, 24h)
-Paid → Expired                (worker: 7-day lifetime exceeded)
-Released → Expired            (worker: stuck > 10 min)
-Downloading → Failed          (worker: stuck > 10 min watchdog)
-Printing → Failed             (worker: stuck > 10 min watchdog)
-```
+## Core Job States
+`Draft -> Uploaded -> Quoted -> Paid -> Released -> Downloading -> Printing -> Completed -> Deleted`
 
-Any other transition throws `DomainException(ErrorCodes.JobStateInvalid)`.
+Other guarded paths exist for `Failed` and `Expired` and are enforced in `JobStateMachine`.
 
----
+## API Surface (Current)
+### Public (`/api/v1/public`)
+- `POST /printjobs`
+- `POST /printjobs/{id}/finalize`
+- `POST /printjobs/{id}/quote`
+- `POST /printjobs/{id}/pay-mock`
+- `POST /printjobs/{id}/otp/generate`
+- `GET /printjobs/{id}`
+- `GET /stores`
 
-## Error Format (Always)
+### Device (`/api/v1/device`)
+- `POST /heartbeat` (includes optional `printerHealth` payload)
+- `POST /release`
+- `GET /printjobs/{id}/file`
+- `POST /printjobs/{id}/printing-started`
+- `POST /printjobs/{id}/completed`
+- `POST /printjobs/{id}/failed`
 
-```json
-{ "error": { "code": "ERROR_CODE", "message": "Human readable" } }
-```
+### Admin (`/api/v1/admin`)
+- `POST /devices`
+- `PATCH /devices/{id}/deactivate`
+- `GET /devices` (includes computed printer alerts)
+- `GET /devices/alerts` (flat alert feed)
+- `POST /stores`
+- `GET /stores`
 
-All codes in `Domain/Errors/ErrorCodes.cs`. Never invent new error code strings inline.
+## Security and Behavior Rules
+- OTP: 6-digit numeric, Argon2id-hashed, expires in 6 hours, single-use.
+- OTP release is rate limited (per device) and should not leak job existence.
+- File token: short-lived JWT, single-use enforced by `UsedFileTokens`.
+- Device auth must stay generic on failure (`DEVICE_UNAUTHORIZED`).
+- Never log OTP plaintext/hash, shared secrets, or file contents.
+- Use constants from `Domain/Errors/ErrorCodes.cs` for error codes.
 
----
+## Phase 3 Testing Baseline
+Integration project: `tests/PrintNest.IntegrationTests`
 
-## API Endpoints
+- Uses `WebApplicationFactory<Program>`.
+- Uses Testcontainers Postgres + MinIO.
+- Uses deterministic worker hooks (`RunOnceAsync`) and release concurrency hook.
+- Covers 15 handoff scenarios (happy path, OTP/token semantics, replay/signature checks, workers, invalid transitions, ownership, admin auth).
 
-### Public (no auth) — /api/v1/public/
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | /printjobs | Create job + get presigned upload URL |
-| POST | /printjobs/{id}/finalize | Confirm file uploaded |
-| POST | /printjobs/{id}/quote | Set options + get price |
-| POST | /printjobs/{id}/pay-mock | Mock payment → Paid |
-| POST | /printjobs/{id}/otp/generate | Generate/regenerate OTP |
-| GET | /printjobs/{id} | Get job status |
-| GET | /stores | Get active stores for map |
-
-### Device (HMAC auth) — /api/v1/device/
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | /heartbeat | Update LastHeartbeatUtc |
-| POST | /release | Enter OTP → get file token |
-| GET | /printjobs/{id}/file | Download file (Bearer token) |
-| POST | /printjobs/{id}/printing-started | CUPS job submitted |
-| POST | /printjobs/{id}/completed | Print success |
-| POST | /printjobs/{id}/failed | Print failure |
-
-### Admin (X-Admin-Key header) — /api/v1/admin/
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | /devices | Register new device |
-| PATCH | /devices/{id}/deactivate | Deactivate device |
-| GET | /devices | List all devices |
-| POST | /stores | Create store |
-| GET | /stores | List all stores |
-
----
-
-## Device Authentication
-
-Every device request must include:
-```
-X-Device-Id: dev_storeid_random8
-X-Timestamp: 1708956123          (Unix seconds)
-X-Signature: <hex HMAC-SHA256>
+Run:
+```powershell
+dotnet test tests\PrintNest.IntegrationTests\PrintNest.IntegrationTests.csproj
 ```
 
-Signature = HMACSHA256(SharedSecret, `{timestamp}\n{METHOD}\n{path}\n{bodyHash}`)
+## Phase 4 Backend Baseline
+Implemented backend support for printer health telemetry and staff alert feeds.
 
-- bodyHash = lowercase hex SHA256 of raw body bytes
-- Empty body bodyHash = `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
-- Timestamp drift > 5 minutes → rejected
+- Device heartbeat accepts normalized health input.
+- Device list endpoint returns health summary and computed alerts.
+- Alerts endpoint returns active alert feed for staff UI.
 
----
+Normalized values:
+- Connection: `ONLINE | OFFLINE | UNKNOWN`
+- Operational: `IDLE | PRINTING | ERROR | UNKNOWN`
+- Ink: `OK | LOW | VERY_LOW | EMPTY | UNKNOWN`
 
-## Key Business Rules
-
-1. **OTP**: 6-digit numeric, Argon2id hashed, 6h expiry, single-use, rate-limited 6 attempts/min/device
-2. **File token**: JWT HS256, 120s TTL, device-bound, single-use (JTI in UsedFileTokens table)
-3. **Double-release prevention**: EF Core optimistic concurrency on Status column
-4. **File deletion**: Cleanup worker handles it. If MinIO fails → retry next run (status check guards safety)
-5. **Stuck jobs**: ExpiryWorker watchdog — Released > 10 min → Expired; Downloading/Printing > 10 min → Failed
-6. **Abandoned jobs**: Draft/Uploaded/Quoted older than 24h → Expired (files in MinIO are then deleted)
-7. **OTP never logged**: Search codebase for "OtpHash" — never appears in any log call
-
----
-
-## Adding a New Feature (Checklist)
-
-1. Does it need a new state? → Add to `Domain/Enums/JobStatus.cs` + transition in `JobStateMachine.cs`
-2. Does it talk to an external system? → Add interface in `Application/Interfaces/`, implement in `Infrastructure/`
-3. Is it a user action? → Add command in `Application/Commands/`
-4. Does it need an audit trail? → Call `IAuditService.RecordAsync()` in the command, before `SaveChangesAsync()`
-5. Does it need an API endpoint? → Add to the appropriate controller in `Api/Controllers/`
-6. Register any new services in `Program.cs`
-7. Add the migration: `dotnet ef migrations add YourMigrationName`
-
----
-
-## Running Locally
-
-```bash
-cp infra/.env.example infra/.env
-# Edit infra/.env with real values
-
-docker-compose up
-# API: http://localhost:5000
-# MinIO console: http://localhost:9001
-# Swagger: http://localhost:5000/swagger
+## Local Commands
+```powershell
+dotnet build printnest.sln
+dotnet test tests\PrintNest.IntegrationTests\PrintNest.IntegrationTests.csproj
 ```
 
----
-
-## Testing the Full Flow
-
-**Public + Admin endpoints** → open `printnest.http` in VS Code (REST Client extension)
-
-**Device flow** (requires HMAC signing — use the simulator):
-```bash
-# 1. Register a device (run once)
-ADMIN_API_KEY=your-key bash tools/provision-device.sh dev_store1_01 store_id
-
-# 2. Run public flow (Steps 3–8 in printnest.http) to get an OTP, then:
-bash tools/simulate-device.sh dev_store1_01 "<base64-secret>" <otp-code>
-# Downloads file to /tmp/printnest-<jobId>.pdf and runs full flow to Completed
-```
-
----
-
-## Adding EF Migrations
-
-```bash
-dotnet ef migrations add InitialSchema --output-dir Infrastructure/Persistence/Migrations
-dotnet ef database update
-```
-
----
-
-## Security Rules (Never Violate)
-
-- Never log OTP plaintext or hash
-- Never log file content or object keys in user-visible errors
-- Never reveal job existence in OTP failure responses (always "Invalid code.")
-- SharedSecret never returned in list endpoints
-- All device auth failures return the same generic 401
-- Admin key uses constant-time comparison
+## AI Agent Checklist Before Handoff
+1. Build succeeds.
+2. Relevant tests pass.
+3. Migrations added for schema changes.
+4. Bookmark updated in `HANDOFF.md` if user asked to bookmark.
+5. If user asked bookmark + commit, include bookmark and code in same commit.

@@ -10,10 +10,14 @@ be able to pick up the project in full fidelity without reading any other file f
 
 ### Session Bookmark Protocol
 
+Primary quick-runbook for agents now exists at `AGENTS.md`.
+Use `AGENTS.md` + this bookmark section together.
+
 **On every session start:**
-1. Read the `## CURRENT BOOKMARK` section at the bottom of this file.
-2. Tell the user exactly where work was left off, what was completed, and what is next.
-3. Do this before asking any questions or writing any code.
+1. Read `AGENTS.md`.
+2. Read the `## CURRENT BOOKMARK` section at the bottom of this file.
+3. Tell the user exactly where work was left off, what was completed, and what is next.
+4. Do this before asking any questions or writing any code.
 
 **When the user says any of these (or similar):**
 > "stop", "bookmark this", "that's it for today", "calling it a day",
