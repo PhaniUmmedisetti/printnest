@@ -78,6 +78,12 @@ public sealed class Device
     /// <summary>When printer telemetry was last updated by heartbeat.</summary>
     public DateTime? PrinterStatusUpdatedAtUtc { get; set; }
 
+    /// <summary>Start of the rolling window used to detect printer connection flapping.</summary>
+    public DateTime? PrinterConnectionFlapWindowStartedAtUtc { get; set; }
+
+    /// <summary>Number of ONLINE/OFFLINE transitions observed within the current flap window.</summary>
+    public int PrinterConnectionFlapTransitions { get; set; }
+
     /// <summary>
     /// Soft delete flag. When false, the device is treated as unknown by the auth middleware.
     /// Use this instead of deleting the row to preserve audit history.

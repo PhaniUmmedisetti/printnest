@@ -15,6 +15,26 @@ internal static class ApiFlowHelpers
     internal sealed record DeviceIdentity(string StoreId, string DeviceId, string SharedSecret);
     internal sealed record JobIdentity(Guid JobId, string Otp);
     internal sealed record ReleaseIdentity(Guid JobId, string FileToken);
+    internal sealed record StaffAuthSession(string AccessToken, string Role, string? StoreId);
+
+    public static async Task<StaffAuthSession> LoginAsStaffAsync(
+        HttpClient client,
+        string username,
+        string password)
+    {
+        using var response = await client.PostAsJsonAsync("/api/v1/staff/auth/login", new { username, password });
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var accessToken = payload.GetProperty("accessToken").GetString();
+        accessToken.Should().NotBeNullOrWhiteSpace();
+
+        var user = payload.GetProperty("user");
+        var role = user.GetProperty("role").GetString()!;
+        var storeId = user.TryGetProperty("storeId", out var storeIdNode) ? storeIdNode.GetString() : null;
+
+        return new StaffAuthSession(accessToken!, role, storeId);
+    }
 
     public static async Task<Guid> CreateDraftJobAsync(HttpClient client)
     {
@@ -32,15 +52,17 @@ internal static class ApiFlowHelpers
 
     public static async Task<DeviceIdentity> RegisterStoreAndDeviceAsync(
         HttpClient client,
-        string adminApiKey,
+        string _legacyUnusedAdminAuthValue,
         string? storeId = null,
         string? deviceId = null)
     {
         storeId ??= $"store_{Guid.NewGuid():N}";
         deviceId ??= $"dev_{Guid.NewGuid():N}";
+        var admin = await LoginAsStaffAsync(client, "admin", "integration-admin-pass-123");
+        var adminAccessToken = admin.AccessToken;
 
         using var storeRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/stores");
-        storeRequest.Headers.Add("X-Admin-Key", adminApiKey);
+        storeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAccessToken);
         storeRequest.Content = JsonContent.Create(new
         {
             storeId,
@@ -54,7 +76,7 @@ internal static class ApiFlowHelpers
         storeResponse.EnsureSuccessStatusCode();
 
         using var registerRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/devices");
-        registerRequest.Headers.Add("X-Admin-Key", adminApiKey);
+        registerRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAccessToken);
         registerRequest.Content = JsonContent.Create(new { deviceId, storeId });
 
         using var registerResponse = await client.SendAsync(registerRequest);
@@ -187,6 +209,19 @@ internal static class ApiFlowHelpers
         if (!string.IsNullOrEmpty(bearerToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
 
+        return request;
+    }
+
+    public static HttpRequestMessage CreateStaffRequest(
+        HttpMethod method,
+        string path,
+        string accessToken,
+        object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        if (body is not null)
+            request.Content = JsonContent.Create(body);
         return request;
     }
 

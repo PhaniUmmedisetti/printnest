@@ -1039,41 +1039,43 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-02-28
+**Date:** 2026-03-02
 
 **Completed this session:**
-- Added AI-agent operating/runbook docs:
-  - created `AGENTS.md` as the primary AI workflow file
-  - updated `HANDOFF.md` session protocol to reference `AGENTS.md`
-  - refreshed `CLAUDE.md` to clean ASCII + current Phase 3/4 context.
-- Implemented Phase 4 backend hardening for real-time staff operations:
-  - added device telemetry history fields (`*_SinceUtc`, ink transition timestamps, learned low->empty baseline stats)
-  - extended heartbeat logic to maintain alert-age timestamps and update low->empty duration baseline when ink reaches `EMPTY`
-  - upgraded admin alert payloads with:
-    - severity tiers: `WARNING | CRITICAL | BLOCKING`
-    - escalation metadata: `firstObservedAtUtc`, `escalatesAtUtc`, `isEscalated`
-    - ink prediction window (`inkPrediction`) with confidence/samples.
-- Added release safeguard in `ReleaseJobCommand`:
-  - OTP release now returns `PRINTER_NOT_READY` (409) when device has blocking consumable states (`INK_EMPTY`, `PAPER_OUT`, `CARTRIDGE_MISSING`, `DOOR_OPEN`).
-- Added EF migration:
-  - `20260228214501_AddAlertEscalationAndInkPrediction`.
-- Expanded integration coverage:
-  - release blocked when ink is empty
-  - alerts endpoint returns escalation + ink prediction metadata.
-- Validation completed with Docker running:
+- Phase 4 backend moved from admin-key auth to staff JWT auth:
+  - added `POST /api/v1/staff/auth/login`
+  - added staff roles (`SUPER_ADMIN`, `STORE_MANAGER`)
+  - added backend store scoping for admin monitoring endpoints
+  - added bootstrap super-admin config + `staff_users` migration.
+- Phase 4 monitoring backend expanded:
+  - device heartbeat now records normalized printer telemetry and connection flapping history
+  - `/api/v1/admin/devices`, `/api/v1/admin/devices/alerts`, and `/api/v1/admin/ops/summary` support staff monitoring
+  - derived alerts include watchdog, queue backlog, print failure trend, and connection flapping.
+- Store-ops workflow was simplified:
+  - removed ticket-style incident action state
+  - kept monitoring-only alerts, summaries, and action guidance for store staff.
+- Separate staff PWA repo exists at `C:\Users\phani\Desktop\printnest-staff-pwa`:
+  - sign-in with staff username/password
+  - redesigned alert-first dashboard with a master-detail layout
+  - persistent service address in session storage
+  - professional user-facing error messages
+  - partial data loading so one failed endpoint does not blank the whole page.
+- Validation completed:
   - `dotnet build printnest.sln` -> success, 0 warnings
-  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 19, Failed 0**.
+  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 22, Failed 0**
+  - `npm run typecheck` in `printnest-staff-pwa` -> success
+  - `npm run build` in `printnest-staff-pwa` -> success.
 
-**Stopped at:** All backend changes implemented and validated locally; ready to finalize commit/push.
+**Stopped at:** Both repos are ready to commit; backend auth/monitoring changes and the separate staff PWA redesign are implemented and validated.
 
-**Next step:** Build the staff PWA (real-time alert dashboard) on top of `/api/v1/admin/devices` and `/api/v1/admin/devices/alerts`, then add live update transport (SignalR/WebSocket with polling fallback).
+**Next step:** Review the staff PWA with live printer telemetry, then decide whether to keep polling for first release or add SignalR/WebSocket realtime updates.
 
 **Pending decisions:**
 - Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
-- Real-time delivery approach for staff PWA first release: SignalR only vs SignalR + Web Push.
+- Whether Phase 4 staff monitoring should stay polling-only for first release or move immediately to SignalR/WebSocket.
 
 **Context notes:**
-- Current test baseline: integration suite total is 19 and green.
+- Current integration test baseline is 22 and green.
 - Runtime `Domain error ...` logs during tests are expected negative-case assertions.
-- `dotnet ef` emitted a tooling-version advisory (EF tools 7.x vs runtime 8.x) but migration/build/tests succeeded.
+- Separate repo `printnest-staff-pwa` contains the current staff dashboard implementation and should be committed independently.
 - `infra/.env` secrets remain local-only and must not be committed.

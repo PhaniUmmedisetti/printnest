@@ -77,18 +77,24 @@ Other guarded paths exist for `Failed` and `Expired` and are enforced in `JobSta
 - `POST /printjobs/{id}/failed`
 
 ### Admin (`/api/v1/admin`)
+- Auth: `Authorization: Bearer <staff-access-token>`
 - `POST /devices`
 - `PATCH /devices/{id}/deactivate`
 - `GET /devices` (includes computed printer alerts)
 - `GET /devices/alerts` (flat alert feed)
 - `POST /stores`
 - `GET /stores`
+- `POST /staff-users` (super-admin only)
+
+### Staff Auth (`/api/v1/staff/auth`)
+- `POST /login`
 
 ## Security and Behavior Rules
 - OTP: 6-digit numeric, Argon2id-hashed, expires in 6 hours, single-use.
 - OTP release is rate limited (per device) and should not leak job existence.
 - File token: short-lived JWT, single-use enforced by `UsedFileTokens`.
 - Device auth must stay generic on failure (`DEVICE_UNAUTHORIZED`).
+- Staff/admin auth must remain role-safe and store-scoped.
 - Never log OTP plaintext/hash, shared secrets, or file contents.
 - Use constants from `Domain/Errors/ErrorCodes.cs` for error codes.
 

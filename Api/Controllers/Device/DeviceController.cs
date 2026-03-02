@@ -81,6 +81,7 @@ public sealed class DeviceController : ControllerBase
             device.PrinterInkState = NormalizePrinterInkState(req.PrinterHealth.InkState);
             device.PrinterRawStatusJson = req.PrinterHealth.RawStatusJson;
             device.PrinterStatusUpdatedAtUtc = now;
+            UpdateConnectionFlappingWindow(device, previousConnectionState, now);
 
             device.PrinterOfflineSinceUtc = TrackActiveSince(
                 previousConnectionState,
@@ -342,6 +343,31 @@ public sealed class DeviceController : ControllerBase
     {
         return string.Equals(inkState, "LOW", StringComparison.OrdinalIgnoreCase)
             || string.Equals(inkState, "VERY_LOW", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void UpdateConnectionFlappingWindow(Device device, string? previousConnectionState, DateTime nowUtc)
+    {
+        var currentState = device.PrinterConnectionState;
+        var transitioned = IsConnectionState(previousConnectionState)
+            && IsConnectionState(currentState)
+            && !string.Equals(previousConnectionState, currentState, StringComparison.OrdinalIgnoreCase);
+
+        if (device.PrinterConnectionFlapWindowStartedAtUtc is null ||
+            device.PrinterConnectionFlapWindowStartedAtUtc < nowUtc.AddMinutes(-15))
+        {
+            device.PrinterConnectionFlapWindowStartedAtUtc = nowUtc;
+            device.PrinterConnectionFlapTransitions = transitioned ? 1 : 0;
+            return;
+        }
+
+        if (transitioned)
+            device.PrinterConnectionFlapTransitions += 1;
+    }
+
+    private static bool IsConnectionState(string? state)
+    {
+        return string.Equals(state, "ONLINE", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, "OFFLINE", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void UpdateLowToEmptyBaseline(Device device, DateTime nowUtc)

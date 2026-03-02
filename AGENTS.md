@@ -34,10 +34,12 @@ If the user asks to bookmark:
 ## Phase Status (Current)
 - Phase 3: complete and automated via integration tests.
 - Phase 4 (backend): printer health telemetry + alerts endpoints implemented.
-- Staff UI for printer monitoring is the next major deliverable.
+- Staff JWT authentication + role/store scoping is implemented on backend.
+- Staff PWA lives in a separate repo: `C:\Users\phani\Desktop\printnest-staff-pwa`.
 
 ## Current Monitoring Contract (Phase 4 backend)
 - Device heartbeat accepts optional `printerHealth`.
+- Staff login endpoint: `POST /api/v1/staff/auth/login` (username/password -> bearer token).
 - Admin endpoints:
   - `GET /api/v1/admin/devices` (includes `printerHealth` + computed `alerts`)
   - `GET /api/v1/admin/devices/alerts` (flat alert feed for staff dashboard)

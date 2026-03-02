@@ -35,9 +35,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ── Infrastructure services ───────────────────────────────────────────────────
 builder.Services.AddScoped<IStorageService, MinioStorageService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddScoped<IStaffTokenService, StaffTokenService>();
 builder.Services.AddScoped<IDeviceAuthService, HmacDeviceAuthService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<IStaffPasswordService, StaffPasswordService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<StaffBootstrapService>();
 
 // ── Application commands ──────────────────────────────────────────────────────
 builder.Services.AddScoped<CreateJobCommand>();
@@ -85,7 +88,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var staffBootstrap = scope.ServiceProvider.GetRequiredService<StaffBootstrapService>();
     db.Database.Migrate();
+    await staffBootstrap.EnsureBootstrapSuperAdminAsync(db);
 }
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
@@ -109,10 +114,10 @@ app.UseWhen(
     deviceApp => deviceApp.UseMiddleware<DeviceAuthMiddleware>()
 );
 
-// Apply admin auth middleware only to /api/v1/admin/* routes.
+// Apply staff JWT auth middleware only to /api/v1/admin/* routes.
 app.UseWhen(
     ctx => ctx.Request.Path.StartsWithSegments("/api/v1/admin"),
-    adminApp => adminApp.UseMiddleware<AdminAuthMiddleware>()
+    adminApp => adminApp.UseMiddleware<StaffAuthMiddleware>()
 );
 
 app.MapControllers();

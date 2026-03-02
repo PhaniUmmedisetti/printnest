@@ -433,25 +433,32 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task Admin_Key_Validation_Works_For_Missing_Wrong_And_Correct()
+    public async Task Staff_Login_And_Admin_Auth_Validation_Works_For_Missing_Wrong_And_Correct()
     {
         using var factory = _fixture.CreateFactory();
         using var client = factory.CreateClient();
 
-        using var missingKeyResponse = await client.GetAsync("/api/v1/admin/stores");
-        missingKeyResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await ApiFlowHelpers.GetErrorCodeAsync(missingKeyResponse)).Should().Be(ErrorCodes.AdminUnauthorized);
+        using var missingAuthResponse = await client.GetAsync("/api/v1/admin/stores");
+        missingAuthResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ApiFlowHelpers.GetErrorCodeAsync(missingAuthResponse)).Should().Be(ErrorCodes.AdminUnauthorized);
 
-        using var wrongKeyRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/stores");
-        wrongKeyRequest.Headers.Add("X-Admin-Key", "wrong-key");
-        using var wrongKeyResponse = await client.SendAsync(wrongKeyRequest);
-        wrongKeyResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await ApiFlowHelpers.GetErrorCodeAsync(wrongKeyResponse)).Should().Be(ErrorCodes.AdminUnauthorized);
+        using var wrongLoginResponse = await client.PostAsJsonAsync("/api/v1/staff/auth/login", new
+        {
+            username = _fixture.StaffBootstrapUsername,
+            password = "wrong-password"
+        });
+        wrongLoginResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await ApiFlowHelpers.GetErrorCodeAsync(wrongLoginResponse)).Should().Be(ErrorCodes.AdminUnauthorized);
 
-        using var correctKeyRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/stores");
-        correctKeyRequest.Headers.Add("X-Admin-Key", _fixture.AdminApiKey);
-        using var correctKeyResponse = await client.SendAsync(correctKeyRequest);
-        correctKeyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var admin = await ApiFlowHelpers.LoginAsStaffAsync(
+            client,
+            _fixture.StaffBootstrapUsername,
+            _fixture.StaffBootstrapPassword);
+
+        using var correctAuthRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/stores");
+        correctAuthRequest.Headers.Authorization = new("Bearer", admin.AccessToken);
+        using var correctAuthResponse = await client.SendAsync(correctAuthRequest);
+        correctAuthResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private static async Task UpdateJobAsync(

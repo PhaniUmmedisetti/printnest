@@ -85,8 +85,11 @@ services:
       # JWT
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       Jwt__FileTokenTtlSeconds: ${JWT_FILE_TOKEN_TTL_SECONDS:-120}
-      # Admin
-      AdminApiKey: ${ADMIN_API_KEY}
+      # Staff auth
+      StaffAuth__AccessTokenTtlMinutes: ${STAFF_AUTH_ACCESS_TOKEN_TTL_MINUTES:-480}
+      StaffAuth__BootstrapUsername: ${STAFF_AUTH_BOOTSTRAP_USERNAME:-admin}
+      StaffAuth__BootstrapPassword: ${STAFF_AUTH_BOOTSTRAP_PASSWORD}
+      StaffAuth__BootstrapDisplayName: ${STAFF_AUTH_BOOTSTRAP_DISPLAY_NAME:-System Admin}
       # Storage (MinIO)
       Storage__Endpoint: ${STORAGE_ENDPOINT:-http://minio:9000}
       Storage__AccessKey: ${MINIO_ROOT_USER:-minioadmin}

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PrintNest.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PrintNest.Infrastructure.Persistence;
 namespace PrintNest.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260228230332_AddStaffUserAuthentication")]
+    partial class AddStaffUserAuthentication
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,16 +92,6 @@ namespace PrintNest.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PrinterCartridgeMissingSinceUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("printer_cartridge_missing_since_utc");
-
-                    b.Property<int>("PrinterConnectionFlapTransitions")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("printer_connection_flap_transitions");
-
-                    b.Property<DateTime?>("PrinterConnectionFlapWindowStartedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("printer_connection_flap_window_started_at_utc");
 
                     b.Property<string>("PrinterConnectionState")
                         .HasMaxLength(32)

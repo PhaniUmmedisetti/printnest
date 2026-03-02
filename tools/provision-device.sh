@@ -6,18 +6,19 @@
 # its credentials to a .env file ready to be copied to the Pi.
 #
 # Usage:
-#   ADMIN_API_KEY=<key> ./provision-device.sh <DEVICE_ID> [STORE_ID]
+#   STAFF_USERNAME=<username> STAFF_PASSWORD=<password> ./provision-device.sh <DEVICE_ID> [STORE_ID]
 #
 #   DEVICE_ID must start with "dev_". Example: dev_store1_abc12345
 #   STORE_ID  optional — associates the device with a store at registration time
 #
 # Environment variables:
-#   ADMIN_API_KEY  (required) — X-Admin-Key for the PrintNest admin API
+#   STAFF_USERNAME (required) — staff/super-admin username
+#   STAFF_PASSWORD (required) — staff/super-admin password
 #   API_URL        (optional) — defaults to http://localhost:5000
 #   OUTPUT_DIR     (optional) — where to write the .env file, defaults to .
 #
 # Example:
-#   ADMIN_API_KEY=your-secret-key ./provision-device.sh dev_hyd_supermart_01 store_supermart_01
+#   STAFF_USERNAME=admin STAFF_PASSWORD=your-password ./provision-device.sh dev_hyd_supermart_01 store_supermart_01
 #
 # Output:
 #   Creates <DEVICE_ID>.env in OUTPUT_DIR with the device credentials.
@@ -30,7 +31,8 @@ set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
 API_URL="${API_URL:-http://localhost:5000}"
-ADMIN_KEY="${ADMIN_API_KEY:?Error: ADMIN_API_KEY environment variable is required}"
+STAFF_USERNAME="${STAFF_USERNAME:?Error: STAFF_USERNAME environment variable is required}"
+STAFF_PASSWORD="${STAFF_PASSWORD:?Error: STAFF_PASSWORD environment variable is required}"
 DEVICE_ID="${1:?Usage: $0 <DEVICE_ID> [STORE_ID]}"
 STORE_ID="${2:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-.}"
@@ -52,6 +54,27 @@ done
 # ── Register device ───────────────────────────────────────────────────────────
 echo "→ Registering device '$DEVICE_ID'..."
 
+LOGIN_PAYLOAD=$(printf '{"username":"%s","password":"%s"}' "$STAFF_USERNAME" "$STAFF_PASSWORD")
+
+LOGIN_BODY=$(curl -s -w '\n%{http_code}' -X POST "$API_URL/api/v1/staff/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "$LOGIN_PAYLOAD")
+
+LOGIN_STATUS=$(echo "$LOGIN_BODY" | tail -n1)
+LOGIN_RESPONSE=$(echo "$LOGIN_BODY" | head -n-1)
+
+if [ "$LOGIN_STATUS" != "200" ]; then
+    echo "Error: Login failed (HTTP $LOGIN_STATUS)" >&2
+    echo "$LOGIN_RESPONSE" | jq -r '.error.message' 2>/dev/null || echo "$LOGIN_RESPONSE" >&2
+    exit 1
+fi
+
+ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.accessToken')
+if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = "null" ]; then
+    echo "Error: Login response did not include accessToken" >&2
+    exit 1
+fi
+
 if [ -n "$STORE_ID" ]; then
     PAYLOAD=$(printf '{"deviceId":"%s","storeId":"%s"}' "$DEVICE_ID" "$STORE_ID")
 else
@@ -61,7 +84,7 @@ fi
 # Capture HTTP status separately so we can show a clean error
 HTTP_BODY=$(curl -s -w '\n%{http_code}' -X POST "$API_URL/api/v1/admin/devices" \
     -H "Content-Type: application/json" \
-    -H "X-Admin-Key: $ADMIN_KEY" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
     -d "$PAYLOAD")
 
 HTTP_STATUS=$(echo "$HTTP_BODY" | tail -n1)

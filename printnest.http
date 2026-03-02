@@ -2,13 +2,14 @@
 # Requires VS Code REST Client extension.
 #
 # Auth model:
-# - Admin APIs: X-Admin-Key
+# - Staff/Admin APIs: JWT bearer from /api/v1/staff/auth/login
 # - Device APIs: HMAC headers (use tools/simulate-device.sh)
-# - No login JWT endpoint exists
 # - File JWT is issued by POST /api/v1/device/release after OTP validation
 
 @baseUrl = http://localhost:5000
-@adminKey = k21vCRggYgJNsxRPEAbRJlO92j4kWEVhwjAJI7qYQiPPpKb6
+@staffUsername = admin
+@staffPassword = replace-with-your-password
+@staffAccessToken = paste-access-token-from-step-1
 
 @storeId = store_supermart_01
 @deviceId = dev_supermart_abc12345
@@ -25,15 +26,20 @@
 GET {{baseUrl}}/health
 
 ###
-# Step 1: Admin auth sanity check
-GET {{baseUrl}}/api/v1/admin/stores
-X-Admin-Key: {{adminKey}}
+# Step 1: Staff login (copy accessToken -> @staffAccessToken)
+POST {{baseUrl}}/api/v1/staff/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{staffUsername}}",
+  "password": "{{staffPassword}}"
+}
 
 ###
 # Step 2: Create store (first run -> 200, later runs may return 409 if already exists)
 POST {{baseUrl}}/api/v1/admin/stores
 Content-Type: application/json
-X-Admin-Key: {{adminKey}}
+Authorization: Bearer {{staffAccessToken}}
 
 {
   "storeId": "{{storeId}}",
@@ -46,14 +52,14 @@ X-Admin-Key: {{adminKey}}
 ###
 # Step 3: List stores
 GET {{baseUrl}}/api/v1/admin/stores
-X-Admin-Key: {{adminKey}}
+Authorization: Bearer {{staffAccessToken}}
 
 ###
 # Step 4: Register device (copy sharedSecret from response into @sharedSecret)
 # If device already exists, use Step 5 and your previous sharedSecret.
 POST {{baseUrl}}/api/v1/admin/devices
 Content-Type: application/json
-X-Admin-Key: {{adminKey}}
+Authorization: Bearer {{staffAccessToken}}
 
 {
   "deviceId": "{{deviceId}}",
@@ -63,7 +69,7 @@ X-Admin-Key: {{adminKey}}
 ###
 # Step 5: List devices
 GET {{baseUrl}}/api/v1/admin/devices
-X-Admin-Key: {{adminKey}}
+Authorization: Bearer {{staffAccessToken}}
 
 ###
 # Step 6: Create print job (copy jobId + upload.url)
@@ -144,5 +150,5 @@ GET {{baseUrl}}/api/v1/public/stores
 ###
 # Optional: deactivate device
 # PATCH {{baseUrl}}/api/v1/admin/devices/{{deviceId}}/deactivate
-# X-Admin-Key: {{adminKey}}
+# Authorization: Bearer {{staffAccessToken}}
 

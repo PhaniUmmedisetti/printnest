@@ -19,6 +19,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<PrintJob> PrintJobs => Set<PrintJob>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<Store> Stores => Set<Store>();
+    public DbSet<StaffUser> StaffUsers => Set<StaffUser>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<UsedFileToken> UsedFileTokens => Set<UsedFileToken>();
 
@@ -27,6 +28,7 @@ public sealed class AppDbContext : DbContext
         ConfigurePrintJobs(model);
         ConfigureDevices(model);
         ConfigureStores(model);
+        ConfigureStaffUsers(model);
         ConfigureAuditEvents(model);
         ConfigureUsedFileTokens(model);
     }
@@ -139,6 +141,8 @@ public sealed class AppDbContext : DbContext
             e.Property(x => x.PrinterLowToEmptyAvgMinutes).HasColumnName("printer_low_to_empty_avg_minutes");
             e.Property(x => x.PrinterLowToEmptySamples).HasColumnName("printer_low_to_empty_samples").HasDefaultValue(0);
             e.Property(x => x.PrinterRawStatusJson).HasColumnName("printer_raw_status_json").HasColumnType("jsonb");
+            e.Property(x => x.PrinterConnectionFlapWindowStartedAtUtc).HasColumnName("printer_connection_flap_window_started_at_utc");
+            e.Property(x => x.PrinterConnectionFlapTransitions).HasColumnName("printer_connection_flap_transitions").HasDefaultValue(0);
             e.Property(x => x.PrinterStatusUpdatedAtUtc).HasColumnName("printer_status_updated_at_utc");
 
             e.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
@@ -172,6 +176,30 @@ public sealed class AppDbContext : DbContext
 
             // Used by map queries: WHERE is_active = true ORDER BY distance
             e.HasIndex(x => x.IsActive).HasDatabaseName("ix_stores_is_active");
+        });
+    }
+
+    private static void ConfigureStaffUsers(ModelBuilder model)
+    {
+        model.Entity<StaffUser>(e =>
+        {
+            e.ToTable("staff_users");
+            e.HasKey(x => x.StaffUserId);
+
+            e.Property(x => x.StaffUserId).HasColumnName("staff_user_id");
+            e.Property(x => x.Username).HasColumnName("username").HasMaxLength(128).IsRequired();
+            e.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+            e.Property(x => x.PasswordHash).HasColumnName("password_hash").HasMaxLength(512).IsRequired();
+            e.Property(x => x.Role).HasColumnName("role").HasMaxLength(32).IsRequired();
+            e.Property(x => x.StoreId).HasColumnName("store_id").HasMaxLength(128);
+            e.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            e.Property(x => x.LastLoginAtUtc).HasColumnName("last_login_at_utc");
+            e.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
+            e.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            e.HasIndex(x => x.Username).IsUnique().HasDatabaseName("ux_staff_users_username");
+            e.HasIndex(x => x.Role).HasDatabaseName("ix_staff_users_role");
+            e.HasIndex(x => x.StoreId).HasDatabaseName("ix_staff_users_store_id");
         });
     }
 

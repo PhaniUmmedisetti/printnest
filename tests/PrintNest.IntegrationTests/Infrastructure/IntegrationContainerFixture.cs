@@ -30,10 +30,13 @@ public sealed class IntegrationContainerFixture : IAsyncLifetime
         .Build();
 
     public string BucketName { get; } = "printfiles";
-    public string AdminApiKey { get; } = "integration-admin-key-0123456789-abcdef";
+    // Legacy compatibility value for older test call-sites. Admin auth now uses staff JWT login.
+    public string AdminApiKey { get; } = "legacy-admin-key-unused";
     public string JwtSigningKey { get; } = "integration-jwt-signing-key-0123456789";
     public string MinioAccessKey { get; } = "minioadmin";
     public string MinioSecretKey { get; } = "minioadmin123";
+    public string StaffBootstrapUsername { get; } = "admin";
+    public string StaffBootstrapPassword { get; } = "integration-admin-pass-123";
 
     public string PostgresConnectionString => _postgres.GetConnectionString();
     public string MinioEndpoint => $"http://{_minio.Hostname}:{_minio.GetMappedPublicPort(9000)}";

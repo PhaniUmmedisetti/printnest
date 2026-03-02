@@ -35,8 +35,12 @@ Expected:
 
 At the top of `printnest.http`, set:
 
-- `@adminKey`
-  - Source: `infra/.env` -> `ADMIN_API_KEY`
+- `@staffUsername`
+  - Source: `infra/.env` -> `STAFF_AUTH_BOOTSTRAP_USERNAME`
+- `@staffPassword`
+  - Source: `infra/.env` -> `STAFF_AUTH_BOOTSTRAP_PASSWORD`
+- `@staffAccessToken`
+  - Copy from Step 1 response (`accessToken`)
 - `@samplePdfPath`
   - Example: `C:/Users/<you>/Downloads/file.pdf`
 - `@sharedSecret`
@@ -57,9 +61,9 @@ Use `printnest.http` top to bottom.
 - Request: `GET /health`
 - Expect: `200`, body has `status: "ok"`
 
-### Step 1 - Admin auth check
-- Request: `GET /api/v1/admin/stores` with `X-Admin-Key`
-- Expect: `200` (auth works)
+### Step 1 - Staff login
+- Request: `POST /api/v1/staff/auth/login` with username/password
+- Expect: `200` with `accessToken`
 
 ### Step 2 - Create store
 - Request: `POST /api/v1/admin/stores`
@@ -145,8 +149,8 @@ After this, cleanup worker should move job from `Completed` to `Deleted` within 
   - Fix: ensure `@jobId` and `@uploadUrl` come from the same Step 6 response
 
 - Admin endpoints return `401`
-  - Cause: wrong `@adminKey`
-  - Fix: copy `ADMIN_API_KEY` from `infra/.env`
+  - Cause: missing/expired/invalid bearer token
+  - Fix: re-run Step 1 and update `@staffAccessToken`
 
 - Device simulator says `jq` missing
   - Fix (Ubuntu WSL): `sudo apt-get update && sudo apt-get install -y jq`

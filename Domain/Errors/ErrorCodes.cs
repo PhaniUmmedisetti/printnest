@@ -60,6 +60,9 @@ public static class ErrorCodes
     public const string ValidationError = "VALIDATION_ERROR";
 
     // ── Admin errors ──────────────────────────────────────────────
-    /// <summary>Admin API key is missing or incorrect.</summary>
+    /// <summary>Staff/admin authentication is missing or invalid.</summary>
     public const string AdminUnauthorized = "ADMIN_UNAUTHORIZED";
+
+    /// <summary>Staff user is authenticated but does not have required privileges.</summary>
+    public const string AdminForbidden = "ADMIN_FORBIDDEN";
 }
