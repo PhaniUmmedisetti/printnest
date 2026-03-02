@@ -1060,22 +1060,27 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
   - persistent service address in session storage
   - professional user-facing error messages
   - partial data loading so one failed endpoint does not blank the whole page.
+- Repo docs were updated to match reality:
+  - `AGENTS.md`, `CLAUDE.md`, and `HANDOFF.md` now explicitly note that Phase 6 is not yet documented in Markdown
+  - next roadmap work is to re-evaluate later phases before Phase 6 starts.
 - Validation completed:
   - `dotnet build printnest.sln` -> success, 0 warnings
   - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 22, Failed 0**
   - `npm run typecheck` in `printnest-staff-pwa` -> success
   - `npm run build` in `printnest-staff-pwa` -> success.
 
-**Stopped at:** Both repos are ready to commit; backend auth/monitoring changes and the separate staff PWA redesign are implemented and validated.
+**Stopped at:** Session paused after syncing repo docs with the actual state; backend and PWA commits already exist, and the latest uncommitted change is the documentation cleanup in this repo.
 
-**Next step:** Review the staff PWA with live printer telemetry, then decide whether to keep polling for first release or add SignalR/WebSocket realtime updates.
+**Next step:** Re-evaluate the remaining phases, write the formal Phase 5/6 roadmap in Markdown, then continue with kiosk-side planning for Raspberry Pi 5 + touchscreen + printer.
 
 **Pending decisions:**
 - Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
 - Whether Phase 4 staff monitoring should stay polling-only for first release or move immediately to SignalR/WebSocket.
+- Phase 5 and Phase 6 need a formal re-evaluation pass and are not yet written as a dedicated roadmap in repo docs.
 
 **Context notes:**
 - Current integration test baseline is 22 and green.
 - Runtime `Domain error ...` logs during tests are expected negative-case assertions.
 - Separate repo `printnest-staff-pwa` contains the current staff dashboard implementation and should be committed independently.
+- There is currently no Markdown document in this repo that defines a formal Phase 6 plan.
 - `infra/.env` secrets remain local-only and must not be committed.

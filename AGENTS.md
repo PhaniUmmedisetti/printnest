@@ -36,6 +36,8 @@ If the user asks to bookmark:
 - Phase 4 (backend): printer health telemetry + alerts endpoints implemented.
 - Staff JWT authentication + role/store scoping is implemented on backend.
 - Staff PWA lives in a separate repo: `C:\Users\phani\Desktop\printnest-staff-pwa`.
+- Phase 5 / Phase 6 are not yet frozen into a formal repo roadmap document.
+- Before Phase 6 work begins, re-evaluate all phases and write the updated plan into Markdown.
 
 ## Current Monitoring Contract (Phase 4 backend)
 - Device heartbeat accepts optional `printerHealth`.
