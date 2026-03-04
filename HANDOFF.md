@@ -1039,7 +1039,7 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-03-04
+**Date:** 2026-03-05
 
 **Completed this session:**
 - Re-evaluated repo boundaries around the real product flow and settled on a polyrepo structure:
@@ -1055,12 +1055,17 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
   - moved `dev.cmd`, `dev.ps1`, `stop-dev.cmd`, and `stop-dev.ps1` under `tools/`
   - fixed their path assumptions after the move
   - added `.dev-session.json` to `.gitignore`.
+- Wrote the formal post-Phase-4 roadmap in `docs/ROADMAP.md`:
+  - defined the repo split across backend, kiosk, staff PWA, and future customer app
+  - froze Phase 5 as kiosk integration + Pi deployment baseline
+  - froze Phase 6 as customer app + release readiness
+  - updated `AGENTS.md` and `CLAUDE.md` to reference `docs/ROADMAP.md`.
 - Validation completed:
   - `dotnet build printnest.sln` -> success, 0 warnings.
 
-**Stopped at:** Session paused after backend-repo cleanup and bookmark prep; the repo is ready to commit the documentation/ownership cleanup and then continue Phase 5/6 planning later.
+**Stopped at:** Session paused after drafting the formal roadmap and updating repo guidance docs; the backend repo is ready to commit the roadmap changes and then shift work into Phase 5 kiosk integration planning.
 
-**Next step:** Commit this backend cleanup, then write the formal Phase 5/6 roadmap in Markdown with the new repo ownership model explicitly reflected.
+**Next step:** Standardize the kiosk repo location/ownership handoff, then begin Phase 5 kiosk integration work against the backend device APIs using `docs/ROADMAP.md`.
 
 **Pending decisions:**
 - Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
@@ -1071,5 +1076,5 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 - Current integration test baseline is 22 and green from the prior validated session.
 - Separate repo `printnest-staff-pwa` contains the current staff dashboard implementation and should be committed independently.
 - Kiosk work should continue in the external kiosk repo, not in this backend repo.
-- There is still no Markdown document in this repo that defines a formal Phase 5/6 plan.
+- `docs/ROADMAP.md` now defines the formal Phase 5/6 plan for this backend repo.
 - `infra/.env` secrets remain local-only and must not be committed.
