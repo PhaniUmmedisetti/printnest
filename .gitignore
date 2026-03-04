@@ -29,6 +29,7 @@ out/
 # Logs
 *.log
 logs/
+.dev-session.json
 
 # OS
 .DS_Store

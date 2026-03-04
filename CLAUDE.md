@@ -126,6 +126,7 @@ Normalized values:
 ## Roadmap Status
 - Phase 3 is complete and validated.
 - Phase 4 backend + staff monitoring baseline is implemented.
+- Kiosk frontend + Pi local agent should live in a separate repo and use this backend as the only source of truth.
 - Staff PWA exists in a separate repo at `C:\Users\phani\Desktop\printnest-staff-pwa`.
 - There is currently no formal Markdown plan for Phase 6 in this repo.
 - Before Phase 6 starts, the phase breakdown should be re-evaluated and written into a dedicated roadmap/phase document.

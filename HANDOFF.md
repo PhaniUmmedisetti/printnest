@@ -1039,48 +1039,37 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-03-02
+**Date:** 2026-03-04
 
 **Completed this session:**
-- Phase 4 backend moved from admin-key auth to staff JWT auth:
-  - added `POST /api/v1/staff/auth/login`
-  - added staff roles (`SUPER_ADMIN`, `STORE_MANAGER`)
-  - added backend store scoping for admin monitoring endpoints
-  - added bootstrap super-admin config + `staff_users` migration.
-- Phase 4 monitoring backend expanded:
-  - device heartbeat now records normalized printer telemetry and connection flapping history
-  - `/api/v1/admin/devices`, `/api/v1/admin/devices/alerts`, and `/api/v1/admin/ops/summary` support staff monitoring
-  - derived alerts include watchdog, queue backlog, print failure trend, and connection flapping.
-- Store-ops workflow was simplified:
-  - removed ticket-style incident action state
-  - kept monitoring-only alerts, summaries, and action guidance for store staff.
-- Separate staff PWA repo exists at `C:\Users\phani\Desktop\printnest-staff-pwa`:
-  - sign-in with staff username/password
-  - redesigned alert-first dashboard with a master-detail layout
-  - persistent service address in session storage
-  - professional user-facing error messages
-  - partial data loading so one failed endpoint does not blank the whole page.
-- Repo docs were updated to match reality:
-  - `AGENTS.md`, `CLAUDE.md`, and `HANDOFF.md` now explicitly note that Phase 6 is not yet documented in Markdown
-  - next roadmap work is to re-evaluate later phases before Phase 6 starts.
+- Re-evaluated repo boundaries around the real product flow and settled on a polyrepo structure:
+  - `printnest` stays backend-only and remains the only source of truth
+  - kiosk frontend + Pi local agent belong in a separate kiosk repo
+  - staff PWA remains in `C:\Users\phani\Desktop\printnest-staff-pwa`
+  - customer app should be built later as a separate repo after backend + kiosk flow is stable.
+- Cleaned this backend repo back to backend-only:
+  - removed the temporary copied kiosk workspace from this repo
+  - removed kiosk-specific planning notes that did not belong in the backend repo
+  - updated `AGENTS.md` and `CLAUDE.md` to say kiosk and staff live in separate repos while this backend remains the source of truth.
+- Kept the local dev convenience scripts but organized them properly:
+  - moved `dev.cmd`, `dev.ps1`, `stop-dev.cmd`, and `stop-dev.ps1` under `tools/`
+  - fixed their path assumptions after the move
+  - added `.dev-session.json` to `.gitignore`.
 - Validation completed:
-  - `dotnet build printnest.sln` -> success, 0 warnings
-  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj` -> **Passed 22, Failed 0**
-  - `npm run typecheck` in `printnest-staff-pwa` -> success
-  - `npm run build` in `printnest-staff-pwa` -> success.
+  - `dotnet build printnest.sln` -> success, 0 warnings.
 
-**Stopped at:** Session paused after syncing repo docs with the actual state; backend and PWA commits already exist, and the latest uncommitted change is the documentation cleanup in this repo.
+**Stopped at:** Session paused after backend-repo cleanup and bookmark prep; the repo is ready to commit the documentation/ownership cleanup and then continue Phase 5/6 planning later.
 
-**Next step:** Re-evaluate the remaining phases, write the formal Phase 5/6 roadmap in Markdown, then continue with kiosk-side planning for Raspberry Pi 5 + touchscreen + printer.
+**Next step:** Commit this backend cleanup, then write the formal Phase 5/6 roadmap in Markdown with the new repo ownership model explicitly reflected.
 
 **Pending decisions:**
 - Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
 - Whether Phase 4 staff monitoring should stay polling-only for first release or move immediately to SignalR/WebSocket.
-- Phase 5 and Phase 6 need a formal re-evaluation pass and are not yet written as a dedicated roadmap in repo docs.
+- The exact kiosk repo path/ownership handoff to use for Pi frontend + local agent work going forward.
 
 **Context notes:**
-- Current integration test baseline is 22 and green.
-- Runtime `Domain error ...` logs during tests are expected negative-case assertions.
+- Current integration test baseline is 22 and green from the prior validated session.
 - Separate repo `printnest-staff-pwa` contains the current staff dashboard implementation and should be committed independently.
-- There is currently no Markdown document in this repo that defines a formal Phase 6 plan.
+- Kiosk work should continue in the external kiosk repo, not in this backend repo.
+- There is still no Markdown document in this repo that defines a formal Phase 5/6 plan.
 - `infra/.env` secrets remain local-only and must not be committed.
