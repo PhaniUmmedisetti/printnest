@@ -28,7 +28,6 @@ public sealed class OtpService : IOtpService
     /// </summary>
     public OtpResult Generate()
     {
-        // Use cryptographically secure random number
         var plaintext = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var hash = HashOtp(plaintext);
         return new OtpResult(plaintext, hash);

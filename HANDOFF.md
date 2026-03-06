@@ -1039,42 +1039,33 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-03-05
+**Date:** 2026-03-07
 
 **Completed this session:**
-- Re-evaluated repo boundaries around the real product flow and settled on a polyrepo structure:
-  - `printnest` stays backend-only and remains the only source of truth
-  - kiosk frontend + Pi local agent belong in a separate kiosk repo
-  - staff PWA remains in `C:\Users\phani\Desktop\printnest-staff-pwa`
-  - customer app should be built later as a separate repo after backend + kiosk flow is stable.
-- Cleaned this backend repo back to backend-only:
-  - removed the temporary copied kiosk workspace from this repo
-  - removed kiosk-specific planning notes that did not belong in the backend repo
-  - updated `AGENTS.md` and `CLAUDE.md` to say kiosk and staff live in separate repos while this backend remains the source of truth.
-- Kept the local dev convenience scripts but organized them properly:
-  - moved `dev.cmd`, `dev.ps1`, `stop-dev.cmd`, and `stop-dev.ps1` under `tools/`
-  - fixed their path assumptions after the move
-  - added `.dev-session.json` to `.gitignore`.
-- Wrote the formal post-Phase-4 roadmap in `docs/ROADMAP.md`:
-  - defined the repo split across backend, kiosk, staff PWA, and future customer app
-  - froze Phase 5 as kiosk integration + Pi deployment baseline
-  - froze Phase 6 as customer app + release readiness
-  - updated `AGENTS.md` and `CLAUDE.md` to reference `docs/ROADMAP.md`.
-- Validation completed:
-  - `dotnet build printnest.sln` -> success, 0 warnings.
+- Removed the temporary fixed-OTP kiosk testing override from `Infrastructure/Auth/OtpService.cs` so OTP generation is random again.
+- Rebuilt and force-recreated the Docker API container to ensure the running backend picked up the OTP fix.
+- Verified backend health on `http://localhost:5000/health`.
+- Re-ran backend validation successfully:
+  - `dotnet build printnest.sln`
+  - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj`
+- Proved live multi-user OTP behavior with two fresh jobs:
+  - separate jobs now return different OTPs
+  - this restores the intended mapping of one paid job -> one OTP -> one document at kiosk.
+- Confirmed current product behavior and constraints:
+  - OTP is consumed at release time (`Paid -> Released`), not after print completion
+  - public upload flow currently supports one PDF per job, not multiple files per job.
 
-**Stopped at:** Session paused after drafting the formal roadmap and updating repo guidance docs; the backend repo is ready to commit the roadmap changes and then shift work into Phase 5 kiosk integration planning.
+**Stopped at:** Backend OTP behavior is now production-correct again; the next manual step is kiosk validation using separate `person_a.pdf` and `person_b.pdf` jobs to confirm each OTP prints only its matching document.
 
-**Next step:** Standardize the kiosk repo location/ownership handoff, then begin Phase 5 kiosk integration work against the backend device APIs using `docs/ROADMAP.md`.
+**Next step:** Run the Pi kiosk against two fresh jobs (A and B), verify document-to-OTP isolation on real prints, then decide whether to add a device-side retry flow for failed prints without reusing OTPs.
 
 **Pending decisions:**
-- Whether `DOOR_OPEN` should remain blocking or downgrade to critical in production policy.
-- Whether Phase 4 staff monitoring should stay polling-only for first release or move immediately to SignalR/WebSocket.
-- The exact kiosk repo path/ownership handoff to use for Pi frontend + local agent work going forward.
+- Whether failed prints should be retried using a device-bound post-release retry flow instead of changing OTP consumption semantics.
+- Whether multi-file upload should be designed as one job with multiple documents or remain one file per job for the first release.
 
 **Context notes:**
-- Current integration test baseline is 22 and green from the prior validated session.
-- Separate repo `printnest-staff-pwa` contains the current staff dashboard implementation and should be committed independently.
-- Kiosk work should continue in the external kiosk repo, not in this backend repo.
-- `docs/ROADMAP.md` now defines the formal Phase 5/6 plan for this backend repo.
+- The running Docker API needed `--force-recreate` before the OTP fix became active; rebuilding alone was not enough.
+- Latest verified live OTP sample after the fix returned different codes for different jobs.
+- Temporary OTP override documentation should not be used for staging/production behavior anymore.
+- Kiosk work continues in the external kiosk repo; this repo remains backend-only.
 - `infra/.env` secrets remain local-only and must not be committed.
