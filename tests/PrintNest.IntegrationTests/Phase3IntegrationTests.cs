@@ -99,6 +99,142 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task Retryable_Failed_Job_Can_Regenerate_Otp_And_Release_Again()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var deviceA = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var deviceB = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceA, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingStartedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            new { cupsJobId = "cups-retryable", printerName = "integration-printer" });
+        using var printingStartedResponse = await client.SendAsync(printingStartedRequest);
+        printingStartedResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            new { cupsJobId = "cups-retryable", failureCode = "PAPER_JAM", failureMessage = "jam", isRetryable = true });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
+
+        var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
+        statusPayload.GetProperty("status").GetString().Should().Be("Failed");
+        statusPayload.GetProperty("canRegenerateOtp").GetBoolean().Should().BeTrue();
+
+        var regeneratedOtp = await GenerateOtpAsync(client, job.JobId);
+        var secondRelease = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceB, regeneratedOtp);
+
+        secondRelease.JobId.Should().Be(job.JobId);
+        (await ApiFlowHelpers.GetJobStatusAsync(client, job.JobId)).Should().Be("Released");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task NonRetryable_Failed_Job_Cannot_Regenerate_Otp()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingStartedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-nonretry", printerName = "integration-printer" });
+        using var printingStartedResponse = await client.SendAsync(printingStartedRequest);
+        printingStartedResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-nonretry", failureCode = "CORRUPT_OUTPUT", failureMessage = "fatal", isRetryable = false });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
+
+        using var regenerateResponse = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{job.JobId}/otp/generate", new { });
+        regenerateResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(regenerateResponse)).Should().Be(ErrorCodes.JobStateInvalid);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Completed_Job_Cannot_Regenerate_Otp()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingStartedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-complete", printerName = "integration-printer" });
+        using var printingStartedResponse = await client.SendAsync(printingStartedRequest);
+        printingStartedResponse.EnsureSuccessStatusCode();
+
+        using var completedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/completed",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-complete" });
+        using var completedResponse = await client.SendAsync(completedRequest);
+        completedResponse.EnsureSuccessStatusCode();
+
+        using var regenerateResponse = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{job.JobId}/otp/generate", new { });
+        regenerateResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(regenerateResponse)).Should().Be(ErrorCodes.JobStateInvalid);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task Otp_Expiry_Rejects_Release()
     {
         using var factory = _fixture.CreateFactory();
@@ -323,6 +459,30 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task ExpiryWorker_Marks_Stuck_Released_Job_As_Retryable_Failed()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        await SetJobTimestampsAsync(factory.Services, job.JobId, DateTime.UtcNow.AddMinutes(-30), DateTime.UtcNow.AddMinutes(-30));
+
+        var expiryWorker = factory.Services.GetRequiredService<ExpiryWorker>();
+        await expiryWorker.RunOnceAsync(CancellationToken.None);
+
+        var failedJob = await GetJobFromDbAsync(factory.Services, job.JobId);
+        failedJob.Status.Should().Be(JobStatus.Failed);
+        failedJob.RetryAllowed.Should().BeTrue();
+
+        var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
+        statusPayload.GetProperty("canRegenerateOtp").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task CleanupWorker_Deletes_File_And_Transitions_To_Deleted()
     {
         using var factory = _fixture.CreateFactory();
@@ -358,6 +518,99 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
             new { cupsJobId = "cups-cleanup" });
         using var completedResponse = await client.SendAsync(completedRequest);
         completedResponse.EnsureSuccessStatusCode();
+
+        var cleanupWorker = factory.Services.GetRequiredService<CleanupWorker>();
+        await cleanupWorker.RunOnceAsync(CancellationToken.None);
+
+        var status = await GetJobStatusFromDbAsync(factory.Services, job.JobId);
+        status.Should().Be(JobStatus.Deleted);
+        (await _fixture.ObjectExistsAsync($"jobs/{job.JobId}.pdf")).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task CleanupWorker_Keeps_File_For_Retryable_Failed_Job()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-retry-keep", printerName = "integration-printer" });
+        using var printingResponse = await client.SendAsync(printingRequest);
+        printingResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-retry-keep", failureCode = "PAPER_JAM", failureMessage = "jam", isRetryable = true });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
+
+        var cleanupWorker = factory.Services.GetRequiredService<CleanupWorker>();
+        await cleanupWorker.RunOnceAsync(CancellationToken.None);
+
+        var failedJob = await GetJobFromDbAsync(factory.Services, job.JobId);
+        failedJob.Status.Should().Be(JobStatus.Failed);
+        failedJob.RetryAllowed.Should().BeTrue();
+        (await _fixture.ObjectExistsAsync($"jobs/{job.JobId}.pdf")).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task CleanupWorker_Deletes_File_For_NonRetryable_Failed_Job()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-retry-drop", printerName = "integration-printer" });
+        using var printingResponse = await client.SendAsync(printingRequest);
+        printingResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-retry-drop", failureCode = "UNSUPPORTED", failureMessage = "fatal", isRetryable = false });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
 
         var cleanupWorker = factory.Services.GetRequiredService<CleanupWorker>();
         await cleanupWorker.RunOnceAsync(CancellationToken.None);
@@ -479,6 +732,29 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var job = await db.PrintJobs.AsNoTracking().FirstAsync(j => j.JobId == jobId);
         return job.Status;
+    }
+
+    private static async Task<PrintNest.Domain.Entities.PrintJob> GetJobFromDbAsync(IServiceProvider services, Guid jobId)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.PrintJobs.AsNoTracking().FirstAsync(j => j.JobId == jobId);
+    }
+
+    private static async Task<string> GenerateOtpAsync(HttpClient client, Guid jobId)
+    {
+        using var response = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{jobId}/otp/generate", new { });
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        return payload.GetProperty("otp").GetString()!;
+    }
+
+    private static async Task<System.Text.Json.JsonElement> GetJobStatusPayloadAsync(HttpClient client, Guid jobId)
+    {
+        using var response = await client.GetAsync($"/api/v1/public/printjobs/{jobId}");
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>())!;
     }
 
     private static async Task SetJobTimestampsAsync(

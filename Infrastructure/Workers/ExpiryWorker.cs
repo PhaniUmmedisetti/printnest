@@ -108,19 +108,20 @@ public sealed class ExpiryWorker : BackgroundService
         {
             try
             {
-                JobStateMachine.Transition(job, JobStatus.Expired, actor: "worker");
+                JobStateMachine.Transition(job, JobStatus.Failed, actor: "worker");
+                job.RetryAllowed = true;
                 db.AuditEvents.Add(new Domain.Entities.AuditEvent
                 {
                     JobId = job.JobId,
-                    Type = AuditEventType.JobExpired,
-                    MetaJson = """{"reason":"stuck_in_released"}""",
+                    Type = AuditEventType.JobFailed,
+                    MetaJson = """{"reason":"stuck_in_released","isRetryable":true}""",
                     CreatedAtUtc = now
                 });
-                _logger.LogInformation("[ExpiryWorker] Job {JobId} expired (stuck in Released).", job.JobId);
+                _logger.LogWarning("[ExpiryWorker] Job {JobId} failed (stuck in Released, retry allowed).", job.JobId);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[ExpiryWorker] Could not expire stuck Released job {JobId}.", job.JobId);
+                _logger.LogWarning(ex, "[ExpiryWorker] Could not fail stuck Released job {JobId}.", job.JobId);
             }
         }
 
@@ -135,20 +136,46 @@ public sealed class ExpiryWorker : BackgroundService
         {
             try
             {
+                var stuckInStatus = job.Status;
                 JobStateMachine.Transition(job, JobStatus.Failed, actor: "worker");
+                job.RetryAllowed = true;
                 db.AuditEvents.Add(new Domain.Entities.AuditEvent
                 {
                     JobId = job.JobId,
                     Type = AuditEventType.JobFailed,
-                    MetaJson = $"{{\"reason\":\"watchdog_timeout\",\"stuckInStatus\":\"{job.Status}\"}}",
+                    MetaJson = $"{{\"reason\":\"watchdog_timeout\",\"stuckInStatus\":\"{stuckInStatus}\",\"isRetryable\":true}}",
                     CreatedAtUtc = now
                 });
                 _logger.LogWarning("[ExpiryWorker] Job {JobId} failed (watchdog timeout in {Status}).",
-                    job.JobId, job.Status);
+                    job.JobId, stuckInStatus);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[ExpiryWorker] Could not fail stuck job {JobId}.", job.JobId);
+            }
+        }
+
+        var expiredFailedJobs = await db.PrintJobs
+            .Where(j => j.Status == JobStatus.Failed && j.RetryAllowed && j.CreatedAtUtc < jobLifetimeCutoff)
+            .ToListAsync(ct);
+
+        foreach (var job in expiredFailedJobs)
+        {
+            try
+            {
+                JobStateMachine.Transition(job, JobStatus.Expired, actor: "worker");
+                db.AuditEvents.Add(new Domain.Entities.AuditEvent
+                {
+                    JobId = job.JobId,
+                    Type = AuditEventType.JobExpired,
+                    MetaJson = """{"reason":"retry_window_expired"}""",
+                    CreatedAtUtc = now
+                });
+                _logger.LogInformation("[ExpiryWorker] Job {JobId} expired after remaining retryable too long.", job.JobId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[ExpiryWorker] Could not expire retryable failed job {JobId}.", job.JobId);
             }
         }
 
@@ -184,7 +211,7 @@ public sealed class ExpiryWorker : BackgroundService
             }
         }
 
-        var totalProcessed = expiredPaidJobs.Count + stuckReleasedJobs.Count + stuckActiveJobs.Count + abandonedPrePaymentJobs.Count;
+        var totalProcessed = expiredPaidJobs.Count + stuckReleasedJobs.Count + stuckActiveJobs.Count + expiredFailedJobs.Count + abandonedPrePaymentJobs.Count;
         if (totalProcessed > 0)
         {
             await db.SaveChangesAsync(ct);

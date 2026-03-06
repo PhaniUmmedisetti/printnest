@@ -79,6 +79,7 @@ public sealed class AppDbContext : DbContext
 
             // Completion / deletion
             e.Property(x => x.PrintedAtUtc).HasColumnName("printed_at_utc");
+            e.Property(x => x.RetryAllowed).HasColumnName("retry_allowed").HasDefaultValue(false);
             e.Property(x => x.DeletedAtUtc).HasColumnName("deleted_at_utc");
             e.Property(x => x.DeletePending).HasColumnName("delete_pending").HasDefaultValue(false);
 
@@ -98,6 +99,9 @@ public sealed class AppDbContext : DbContext
 
             // Used by cleanup worker: WHERE delete_pending = true
             e.HasIndex(x => x.DeletePending).HasDatabaseName("ix_print_jobs_delete_pending");
+
+            // Used by retry flow queries/status screens for failed jobs.
+            e.HasIndex(x => x.RetryAllowed).HasDatabaseName("ix_print_jobs_retry_allowed");
 
             // Used by expiry worker: WHERE created_at_utc < now - 7 days AND status = 'Paid'
             e.HasIndex(x => x.CreatedAtUtc).HasDatabaseName("ix_print_jobs_created_at");

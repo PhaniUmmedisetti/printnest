@@ -119,6 +119,7 @@ public sealed class PrintJobsController : ControllerBase
 
     /// <summary>
     /// Step 5: Generate (or regenerate) OTP. Returns OTP once — store it, it won't be shown again.
+    /// Regeneration is allowed only for paid jobs and retryable failed jobs.
     /// POST /api/v1/public/printjobs/{jobId}/otp/generate
     /// </summary>
     [HttpPost("{jobId:guid}/otp/generate")]
@@ -152,6 +153,7 @@ public sealed class PrintJobsController : ControllerBase
             priceCents = job.PriceCents,
             currency = job.Currency,
             otpExpiresAtUtc = job.OtpExpiryUtc,
+            canRegenerateOtp = job.Status == Domain.Enums.JobStatus.Failed && job.RetryAllowed,
             assignedStoreId = job.AssignedStoreId,
             createdAtUtc = job.CreatedAtUtc,
             updatedAtUtc = job.UpdatedAtUtc

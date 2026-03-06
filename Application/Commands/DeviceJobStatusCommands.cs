@@ -12,7 +12,7 @@ namespace PrintNest.Application.Commands;
 ///   - MarkDownloadingCommand   (Released → Downloading)
 ///   - MarkPrintingCommand      (Downloading → Printing)
 ///   - CompleteJobCommand       (Printing → Completed)
-///   - FailJobCommand           (Printing → Failed)
+///   - FailJobCommand           (Released/Downloading/Printing → Failed)
 ///
 /// All commands enforce that the requesting device owns the job (AssignedDeviceId match).
 /// </summary>
@@ -130,8 +130,8 @@ public sealed class CompleteJobCommand
 
 /// <summary>
 /// Called by device when the print job fails (paper jam, printer error, CUPS failure).
-/// Transitions Printing → Failed.
-/// The cleanup worker will delete the file from MinIO and move to Deleted.
+/// Transitions Released/Downloading/Printing → Failed.
+/// Retryable failures retain the uploaded PDF so the customer can generate a fresh OTP.
 /// </summary>
 public sealed class FailJobCommand
 {
@@ -161,6 +161,7 @@ public sealed class FailJobCommand
         DeviceOwnershipGuard.Enforce(job, input.DeviceId);
 
         JobStateMachine.Transition(job, JobStatus.Failed, actor: "device");
+        job.RetryAllowed = input.IsRetryable;
 
         await _audit.RecordAsync(job.JobId, AuditEventType.JobFailed, new
         {

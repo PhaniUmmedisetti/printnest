@@ -14,7 +14,7 @@ namespace PrintNest.Infrastructure.Workers;
 ///
 /// Runs every 60 seconds. Handles two cases:
 ///
-/// 1. FILE DELETION: Jobs in Completed/Failed/Expired with DeletedAtUtc = null
+/// 1. FILE DELETION: Jobs in Completed/Expired/non-retryable Failed with DeletedAtUtc = null
 ///    → Delete from MinIO
 ///    → If success: transition to Deleted
 ///    → If fail: set DeletePending = true, log error, retry next run
@@ -67,16 +67,15 @@ public sealed class CleanupWorker : BackgroundService
         var now = DateTime.UtcNow;
 
         // ── 1. Delete files for terminal jobs ─────────────────────
-        // Include jobs with DeletePending = true (previous delete failed)
-        // Only fetch terminal jobs that still have a file — the status check is the
-        // authoritative guard. DeletePending is a retry hint but NOT a selection criterion
-        // on its own: if it were ever set on a non-terminal job it would cause data loss.
+        // Include jobs with DeletePending = true (previous delete failed).
+        // Retryable Failed jobs are intentionally excluded so the customer can regenerate
+        // a fresh OTP without losing the original uploaded file.
         var jobsToDelete = await db.PrintJobs
             .Where(j =>
                 j.DeletedAtUtc == null &&
                 j.ObjectKey != null &&
                 (j.Status == JobStatus.Completed ||
-                 j.Status == JobStatus.Failed ||
+                 (j.Status == JobStatus.Failed && !j.RetryAllowed) ||
                  j.Status == JobStatus.Expired))
             .ToListAsync(ct);
 

@@ -42,18 +42,22 @@ public static class JobStateMachine
         // ── Device-triggered ──────────────────────────────────────
         (JobStatus.Paid,         JobStatus.Released),    // device: OTP validated
         (JobStatus.Released,     JobStatus.Downloading), // device: started file download
+        (JobStatus.Released,     JobStatus.Failed),      // device/worker: interrupted before download completed
         (JobStatus.Downloading,  JobStatus.Printing),    // device: file received, CUPS job submitted
+        (JobStatus.Downloading,  JobStatus.Failed),      // device/worker: download interrupted
         (JobStatus.Printing,     JobStatus.Completed),   // device: CUPS reported success
         (JobStatus.Printing,     JobStatus.Failed),      // device: CUPS reported failure
+        (JobStatus.Failed,       JobStatus.Paid),        // user: regenerate OTP for retryable failed job
 
         // ── Background worker only ────────────────────────────────
         (JobStatus.Draft,        JobStatus.Expired),     // worker: abandoned before upload (24h)
         (JobStatus.Uploaded,     JobStatus.Expired),     // worker: uploaded but never quoted/paid (24h)
         (JobStatus.Quoted,       JobStatus.Expired),     // worker: quoted but never paid (24h)
         (JobStatus.Paid,         JobStatus.Expired),     // worker: 7-day job lifetime exceeded
-        (JobStatus.Released,     JobStatus.Expired),     // worker: stuck in Released (device never downloaded)
+        (JobStatus.Released,     JobStatus.Expired),     // worker: legacy fallback for stale released jobs
         (JobStatus.Downloading,  JobStatus.Failed),      // worker: stuck in Downloading > 10 min
         (JobStatus.Printing,     JobStatus.Failed),      // worker: stuck in Printing > 10 min (watchdog)
+        (JobStatus.Failed,       JobStatus.Expired),     // worker: retry window/job lifetime exceeded
         (JobStatus.Completed,    JobStatus.Deleted),     // worker: file deleted from MinIO
         (JobStatus.Failed,       JobStatus.Deleted),     // worker: file deleted from MinIO
         (JobStatus.Expired,      JobStatus.Deleted),     // worker: file deleted from MinIO
@@ -167,6 +171,7 @@ public static class JobStateMachine
                 job.OtpExpiryUtc = null;
                 job.OtpAttempts = 0;
                 job.OtpLockedUntilUtc = null;
+                job.RetryAllowed = false;
                 break;
 
             case JobStatus.Expired:
@@ -174,13 +179,19 @@ public static class JobStateMachine
                 job.OtpHash = null;
                 job.OtpExpiryUtc = null;
                 job.OtpLockedUntilUtc = null;
+                job.RetryAllowed = false;
+                job.AssignedDeviceId = null;
+                job.AssignedStoreId = null;
+                job.ReleaseLockUtc = null;
                 break;
 
             case JobStatus.Completed:
+                job.RetryAllowed = false;
                 job.PrintedAtUtc = DateTime.UtcNow;
                 break;
 
             case JobStatus.Deleted:
+                job.RetryAllowed = false;
                 job.DeletedAtUtc = DateTime.UtcNow;
                 break;
         }

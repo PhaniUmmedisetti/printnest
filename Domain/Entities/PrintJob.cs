@@ -76,6 +76,12 @@ public sealed class PrintJob
     /// <summary>Timestamp when the device confirmed print completed.</summary>
     public DateTime? PrintedAtUtc { get; set; }
 
+    /// <summary>
+    /// True when an unfinished failed/interrupted job may generate a fresh OTP and retry from scratch.
+    /// Cleared once the retry OTP is generated or the job reaches a terminal non-retryable state.
+    /// </summary>
+    public bool RetryAllowed { get; set; } = false;
+
     /// <summary>Timestamp when the file was deleted from MinIO and job moved to Deleted.</summary>
     public DateTime? DeletedAtUtc { get; set; }
 

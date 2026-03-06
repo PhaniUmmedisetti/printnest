@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PrintNest.Application.Interfaces;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.Errors;
+using PrintNest.Domain.StateMachine;
 using PrintNest.Infrastructure.Persistence;
 
 namespace PrintNest.Application.Commands;
@@ -9,15 +10,17 @@ namespace PrintNest.Application.Commands;
 /// <summary>
 /// Generates a new OTP for a paid job.
 ///
-/// The user can click "Generate OTP" at any time after payment.
+/// The user can click "Generate OTP" after payment, or regenerate a fresh OTP
+/// for a retryable failed job.
 /// Each click invalidates the previous OTP and issues a new one.
 /// The OTP is valid for 6 hours from generation time.
 ///
 /// This does NOT change the job's state — the job remains in Paid.
 /// The OTP is consumed (job moves to Released) when the device calls ReleaseJobCommand.
+/// Failed jobs may return to Paid for a fresh OTP only when explicitly marked retryable.
 ///
 /// Steps:
-///   1. Load job — must be in Paid state
+///   1. Load job — must be in Paid state, or Failed with RetryAllowed = true
 ///   2. Generate new OTP (plaintext + hash)
 ///   3. Store hash + expiry, reset attempt counters
 ///   4. Return plaintext OTP to caller (shown to user ONCE — never stored)
@@ -27,14 +30,16 @@ public sealed class GenerateOtpCommand
     private readonly AppDbContext _db;
     private readonly IOtpService _otp;
     private readonly IAuditService _audit;
+    private readonly IStorageService _storage;
 
     private static readonly TimeSpan OtpValidity = TimeSpan.FromHours(6);
 
-    public GenerateOtpCommand(AppDbContext db, IOtpService otp, IAuditService audit)
+    public GenerateOtpCommand(AppDbContext db, IOtpService otp, IAuditService audit, IStorageService storage)
     {
         _db = db;
         _otp = otp;
         _audit = audit;
+        _storage = storage;
     }
 
     public sealed record Output(
@@ -47,13 +52,31 @@ public sealed class GenerateOtpCommand
         var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId)
             ?? throw new DomainException(ErrorCodes.JobNotFound, "Job not found.", httpStatus: 404);
 
-        // OTP can only be generated for jobs in Paid state
-        if (job.Status != JobStatus.Paid)
+        var isRetryRegeneration = job.Status == JobStatus.Failed && job.RetryAllowed;
+
+        if (job.Status != JobStatus.Paid && !isRetryRegeneration)
             throw new DomainException(
                 ErrorCodes.JobStateInvalid,
-                "OTP can only be generated for paid jobs.",
+                "OTP can only be generated for paid or retryable failed jobs.",
                 httpStatus: 409
             );
+
+        if (isRetryRegeneration)
+        {
+            if (string.IsNullOrWhiteSpace(job.ObjectKey) || !await _storage.VerifyObjectExistsAsync(job.ObjectKey))
+                throw new DomainException(
+                    ErrorCodes.StorageError,
+                    "Cannot regenerate OTP because the print file is no longer available.",
+                    httpStatus: 409
+                );
+
+            JobStateMachine.Transition(job, JobStatus.Paid, actor: "user");
+            job.AssignedDeviceId = null;
+            job.AssignedStoreId = null;
+            job.ReleaseLockUtc = null;
+            job.RetryAllowed = false;
+            job.DeletePending = false;
+        }
 
         // Generate new OTP — this invalidates any existing OTP
         var result = _otp.Generate();
@@ -71,7 +94,8 @@ public sealed class GenerateOtpCommand
 
         await _audit.RecordAsync(job.JobId, AuditEventType.OtpGenerated, new
         {
-            expiresAtUtc = expiresAt
+            expiresAtUtc = expiresAt,
+            regenerated = isRetryRegeneration
             // Never log the OTP plaintext or hash
         });
 

@@ -1042,30 +1042,41 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 **Date:** 2026-03-07
 
 **Completed this session:**
-- Removed the temporary fixed-OTP kiosk testing override from `Infrastructure/Auth/OtpService.cs` so OTP generation is random again.
-- Rebuilt and force-recreated the Docker API container to ensure the running backend picked up the OTP fix.
-- Verified backend health on `http://localhost:5000/health`.
-- Re-ran backend validation successfully:
-  - `dotnet build printnest.sln`
+- Kept OTP single-use at release time while adding safe retry support for interrupted prints.
+- Added retryable failed-job behavior on the backend:
+  - retryable failures can regenerate a fresh OTP
+  - non-retryable failures remain terminal
+  - completed jobs cannot regenerate OTP.
+- Added persistence support for retry eligibility in `Domain/Entities/PrintJob.cs`, `Infrastructure/Persistence/AppDbContext.cs`, and migration `20260306204750_AddRetryableFailedOtpRegeneration`.
+- Updated domain and application flow:
+  - `Domain/StateMachine/JobStateMachine.cs`
+  - `Application/Commands/GenerateOtpCommand.cs`
+  - `Application/Commands/DeviceJobStatusCommands.cs`
+  - `Api/Controllers/Public/PrintJobsController.cs`
+- Updated workers:
+  - `Infrastructure/Workers/CleanupWorker.cs` now preserves files for retryable failed jobs
+  - `Infrastructure/Workers/ExpiryWorker.cs` now marks stuck released/downloading/printing jobs as retryable failed, then expires them later if they remain unresolved.
+- Added integration coverage for:
+  - retryable failed job can regenerate OTP and release again
+  - completed/non-retryable jobs cannot regenerate
+  - cleanup behavior for retryable vs non-retryable failed jobs
+  - expiry worker turning stuck released jobs into retryable failed jobs.
+- Validation completed:
+  - `dotnet build printnest.sln -p:UseSharedCompilation=false`
   - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj`
-- Proved live multi-user OTP behavior with two fresh jobs:
-  - separate jobs now return different OTPs
-  - this restores the intended mapping of one paid job -> one OTP -> one document at kiosk.
-- Confirmed current product behavior and constraints:
-  - OTP is consumed at release time (`Paid -> Released`), not after print completion
-  - public upload flow currently supports one PDF per job, not multiple files per job.
+  - integration baseline is now 28 passing tests.
 
-**Stopped at:** Backend OTP behavior is now production-correct again; the next manual step is kiosk validation using separate `person_a.pdf` and `person_b.pdf` jobs to confirm each OTP prints only its matching document.
+**Stopped at:** Backend contract for retryable failed prints and fresh OTP regeneration is implemented and validated; Pi/backend/frontend in `PrintProject` still need to pull these changes and adapt to the new retry/status contract.
 
-**Next step:** Run the Pi kiosk against two fresh jobs (A and B), verify document-to-OTP isolation on real prints, then decide whether to add a device-side retry flow for failed prints without reusing OTPs.
+**Next step:** Pull this backend update into `PrintProject`, then update the Pi backend/frontend so kiosk failure flows surface retryable status and work with regenerated OTPs.
 
 **Pending decisions:**
-- Whether failed prints should be retried using a device-bound post-release retry flow instead of changing OTP consumption semantics.
-- Whether multi-file upload should be designed as one job with multiple documents or remain one file per job for the first release.
+- Whether the customer app should expose regenerate-OTP automatically on any retryable failure or only after an explicit timeout/manual acknowledgment.
+- Whether retryable failed jobs should remain bound to the original device for UI messaging purposes, even though a fresh OTP can re-release them later.
 
 **Context notes:**
-- The running Docker API needed `--force-recreate` before the OTP fix became active; rebuilding alone was not enough.
-- Latest verified live OTP sample after the fix returned different codes for different jobs.
-- Temporary OTP override documentation should not be used for staging/production behavior anymore.
+- Backend health still verifies on `http://localhost:5000/health` after `docker compose ... --force-recreate api`.
+- Public status payload now includes `canRegenerateOtp` for customer-side polling/UI decisions.
+- Retry regeneration is allowed only if the original PDF still exists in storage.
 - Kiosk work continues in the external kiosk repo; this repo remains backend-only.
 - `infra/.env` secrets remain local-only and must not be committed.
