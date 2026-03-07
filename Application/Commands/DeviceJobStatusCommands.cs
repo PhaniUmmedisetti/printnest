@@ -116,6 +116,11 @@ public sealed class CompleteJobCommand
 
         JobStateMachine.Transition(job, JobStatus.Completed, actor: "device");
 
+        await _audit.RecordAsync(job.JobId, AuditEventType.OtpConsumed, new
+        {
+            deviceId = input.DeviceId,
+            cupsJobId = input.CupsJobId
+        });
         await _audit.RecordAsync(job.JobId, AuditEventType.JobCompleted, new
         {
             deviceId = input.DeviceId,
@@ -131,7 +136,7 @@ public sealed class CompleteJobCommand
 /// <summary>
 /// Called by device when the print job fails (paper jam, printer error, CUPS failure).
 /// Transitions Released/Downloading/Printing → Failed.
-/// Retryable failures retain the uploaded PDF so the customer can generate a fresh OTP.
+/// Retryable failures retain the uploaded PDF and same OTP so the user can retry later.
 /// </summary>
 public sealed class FailJobCommand
 {
@@ -162,6 +167,14 @@ public sealed class FailJobCommand
 
         JobStateMachine.Transition(job, JobStatus.Failed, actor: "device");
         job.RetryAllowed = input.IsRetryable;
+        if (!input.IsRetryable)
+        {
+            job.OtpHash = null;
+            job.OtpExpiryUtc = null;
+            job.OtpAttempts = 0;
+            job.OtpLockedUntilUtc = null;
+            job.ReleaseLockUtc = null;
+        }
 
         await _audit.RecordAsync(job.JobId, AuditEventType.JobFailed, new
         {

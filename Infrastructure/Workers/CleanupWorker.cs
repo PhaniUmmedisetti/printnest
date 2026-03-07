@@ -68,8 +68,8 @@ public sealed class CleanupWorker : BackgroundService
 
         // ── 1. Delete files for terminal jobs ─────────────────────
         // Include jobs with DeletePending = true (previous delete failed).
-        // Retryable Failed jobs are intentionally excluded so the customer can regenerate
-        // a fresh OTP without losing the original uploaded file.
+        // Retryable Failed jobs are intentionally excluded so the customer can reuse
+        // the same OTP without losing the original uploaded file.
         var jobsToDelete = await db.PrintJobs
             .Where(j =>
                 j.DeletedAtUtc == null &&

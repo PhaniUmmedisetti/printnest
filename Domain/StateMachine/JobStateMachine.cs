@@ -47,7 +47,7 @@ public static class JobStateMachine
         (JobStatus.Downloading,  JobStatus.Failed),      // device/worker: download interrupted
         (JobStatus.Printing,     JobStatus.Completed),   // device: CUPS reported success
         (JobStatus.Printing,     JobStatus.Failed),      // device: CUPS reported failure
-        (JobStatus.Failed,       JobStatus.Paid),        // user: regenerate OTP for retryable failed job
+        (JobStatus.Failed,       JobStatus.Released),    // device: retryable failed job re-released with same OTP
 
         // ── Background worker only ────────────────────────────────
         (JobStatus.Draft,        JobStatus.Expired),     // worker: abandoned before upload (24h)
@@ -106,7 +106,7 @@ public static class JobStateMachine
         switch (to)
         {
             case JobStatus.Released:
-                // OTP must exist at release time — it is nulled atomically during release
+                // OTP must exist at release time.
                 if (job.OtpHash is null)
                     throw new DomainException(
                         ErrorCodes.OtpInvalid,
@@ -114,11 +114,22 @@ public static class JobStateMachine
                         httpStatus: 400
                     );
 
-                // OTP must not have expired
-                if (job.OtpExpiryUtc.HasValue && job.OtpExpiryUtc.Value < DateTime.UtcNow)
+                // Fresh releases from Paid still respect the normal OTP expiry window.
+                // Retryable failed jobs intentionally keep the same OTP alive until
+                // completion/expiry of the whole job, so we skip the 6-hour OTP expiry there.
+                if (from == JobStatus.Paid &&
+                    job.OtpExpiryUtc.HasValue &&
+                    job.OtpExpiryUtc.Value < DateTime.UtcNow)
                     throw new DomainException(
                         ErrorCodes.OtpExpired,
                         "Invalid code.",   // deliberately generic — don't reveal expiry to attacker
+                        httpStatus: 400
+                    );
+
+                if (from == JobStatus.Failed && !job.RetryAllowed)
+                    throw new DomainException(
+                        ErrorCodes.OtpInvalid,
+                        "Invalid code.",
                         httpStatus: 400
                     );
 
@@ -166,9 +177,7 @@ public static class JobStateMachine
             case JobStatus.Released:
                 // Record when the release lock was acquired
                 job.ReleaseLockUtc = DateTime.UtcNow;
-                // OTP is consumed — null it out so it cannot be reused
-                job.OtpHash = null;
-                job.OtpExpiryUtc = null;
+                // OTP remains valid until successful completion or terminal cleanup
                 job.OtpAttempts = 0;
                 job.OtpLockedUntilUtc = null;
                 job.RetryAllowed = false;
@@ -186,6 +195,10 @@ public static class JobStateMachine
                 break;
 
             case JobStatus.Completed:
+                job.OtpHash = null;
+                job.OtpExpiryUtc = null;
+                job.OtpAttempts = 0;
+                job.OtpLockedUntilUtc = null;
                 job.RetryAllowed = false;
                 job.PrintedAtUtc = DateTime.UtcNow;
                 break;

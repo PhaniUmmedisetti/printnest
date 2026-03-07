@@ -74,7 +74,7 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task Otp_Is_Single_Use()
+    public async Task Otp_Cannot_Be_Reused_While_Job_Is_Active()
     {
         using var factory = _fixture.CreateFactory();
         using var client = factory.CreateClient();
@@ -99,7 +99,7 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task Retryable_Failed_Job_Can_Regenerate_Otp_And_Release_Again()
+    public async Task Retryable_Failed_Job_Can_Reuse_Same_Otp_And_Release_Again()
     {
         using var factory = _fixture.CreateFactory();
         using var client = factory.CreateClient();
@@ -138,10 +138,9 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
         var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
         statusPayload.GetProperty("status").GetString().Should().Be("Failed");
-        statusPayload.GetProperty("canRegenerateOtp").GetBoolean().Should().BeTrue();
+        statusPayload.GetProperty("canReuseOtp").GetBoolean().Should().BeTrue();
 
-        var regeneratedOtp = await GenerateOtpAsync(client, job.JobId);
-        var secondRelease = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceB, regeneratedOtp);
+        var secondRelease = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceB, job.Otp);
 
         secondRelease.JobId.Should().Be(job.JobId);
         (await ApiFlowHelpers.GetJobStatusAsync(client, job.JobId)).Should().Be("Released");
@@ -149,7 +148,104 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task NonRetryable_Failed_Job_Cannot_Regenerate_Otp()
+    public async Task Retryable_Failed_Job_Can_Reuse_Same_Otp_After_Original_Expiry()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var deviceA = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var deviceB = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceA, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingStartedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            new { cupsJobId = "cups-expired-retry", printerName = "integration-printer" });
+        using var printingStartedResponse = await client.SendAsync(printingStartedRequest);
+        printingStartedResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            deviceA.DeviceId,
+            deviceA.SharedSecret,
+            new { cupsJobId = "cups-expired-retry", failureCode = "POWER_LOSS", failureMessage = "lost power", isRetryable = true });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
+
+        await UpdateJobAsync(factory.Services, job.JobId, j =>
+        {
+            j.OtpExpiryUtc = DateTime.UtcNow.AddHours(-12);
+            return Task.CompletedTask;
+        });
+
+        var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
+        statusPayload.GetProperty("status").GetString().Should().Be("Failed");
+        statusPayload.GetProperty("canReuseOtp").GetBoolean().Should().BeTrue();
+        statusPayload.GetProperty("otpExpiresAtUtc").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+
+        var secondRelease = await ApiFlowHelpers.ReleaseByOtpAsync(client, deviceB, job.Otp);
+        secondRelease.JobId.Should().Be(job.JobId);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Retryable_Failed_Job_Cannot_Generate_A_New_Otp()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        downloadResponse.EnsureSuccessStatusCode();
+
+        using var printingStartedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/printing-started",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-no-regen", printerName = "integration-printer" });
+        using var printingStartedResponse = await client.SendAsync(printingStartedRequest);
+        printingStartedResponse.EnsureSuccessStatusCode();
+
+        using var failedRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            $"/api/v1/device/printjobs/{job.JobId}/failed",
+            device.DeviceId,
+            device.SharedSecret,
+            new { cupsJobId = "cups-no-regen", failureCode = "PAPER_JAM", failureMessage = "jam", isRetryable = true });
+        using var failedResponse = await client.SendAsync(failedRequest);
+        failedResponse.EnsureSuccessStatusCode();
+
+        using var generateOtpResponse = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{job.JobId}/otp/generate", new { });
+        generateOtpResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(generateOtpResponse)).Should().Be(ErrorCodes.JobStateInvalid);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task NonRetryable_Failed_Job_Cannot_Reuse_Same_Otp()
     {
         using var factory = _fixture.CreateFactory();
         using var client = factory.CreateClient();
@@ -185,14 +281,23 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
         using var failedResponse = await client.SendAsync(failedRequest);
         failedResponse.EnsureSuccessStatusCode();
 
-        using var regenerateResponse = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{job.JobId}/otp/generate", new { });
-        regenerateResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ApiFlowHelpers.GetErrorCodeAsync(regenerateResponse)).Should().Be(ErrorCodes.JobStateInvalid);
+        var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
+        statusPayload.GetProperty("canReuseOtp").GetBoolean().Should().BeFalse();
+
+        using var releaseAgainRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/release",
+            device.DeviceId,
+            device.SharedSecret,
+            new { otp = job.Otp, storeId = device.StoreId });
+        using var releaseAgainResponse = await client.SendAsync(releaseAgainRequest);
+        releaseAgainResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ApiFlowHelpers.GetErrorCodeAsync(releaseAgainResponse)).Should().Be(ErrorCodes.OtpInvalid);
     }
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task Completed_Job_Cannot_Regenerate_Otp()
+    public async Task Completed_Job_Cannot_Reuse_Same_Otp()
     {
         using var factory = _fixture.CreateFactory();
         using var client = factory.CreateClient();
@@ -228,9 +333,18 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
         using var completedResponse = await client.SendAsync(completedRequest);
         completedResponse.EnsureSuccessStatusCode();
 
-        using var regenerateResponse = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{job.JobId}/otp/generate", new { });
-        regenerateResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ApiFlowHelpers.GetErrorCodeAsync(regenerateResponse)).Should().Be(ErrorCodes.JobStateInvalid);
+        var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
+        statusPayload.GetProperty("canReuseOtp").GetBoolean().Should().BeFalse();
+
+        using var releaseAgainRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/release",
+            device.DeviceId,
+            device.SharedSecret,
+            new { otp = job.Otp, storeId = device.StoreId });
+        using var releaseAgainResponse = await client.SendAsync(releaseAgainRequest);
+        releaseAgainResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ApiFlowHelpers.GetErrorCodeAsync(releaseAgainResponse)).Should().Be(ErrorCodes.OtpInvalid);
     }
 
     [Fact]
@@ -478,7 +592,7 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
         failedJob.RetryAllowed.Should().BeTrue();
 
         var statusPayload = await GetJobStatusPayloadAsync(client, job.JobId);
-        statusPayload.GetProperty("canRegenerateOtp").GetBoolean().Should().BeTrue();
+        statusPayload.GetProperty("canReuseOtp").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -739,15 +853,6 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         return await db.PrintJobs.AsNoTracking().FirstAsync(j => j.JobId == jobId);
-    }
-
-    private static async Task<string> GenerateOtpAsync(HttpClient client, Guid jobId)
-    {
-        using var response = await client.PostAsJsonAsync($"/api/v1/public/printjobs/{jobId}/otp/generate", new { });
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        return payload.GetProperty("otp").GetString()!;
     }
 
     private static async Task<System.Text.Json.JsonElement> GetJobStatusPayloadAsync(HttpClient client, Guid jobId)

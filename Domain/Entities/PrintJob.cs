@@ -77,8 +77,8 @@ public sealed class PrintJob
     public DateTime? PrintedAtUtc { get; set; }
 
     /// <summary>
-    /// True when an unfinished failed/interrupted job may generate a fresh OTP and retry from scratch.
-    /// Cleared once the retry OTP is generated or the job reaches a terminal non-retryable state.
+    /// True when an unfinished failed/interrupted job may reuse the same OTP and retry from scratch.
+    /// Cleared once the job becomes non-retryable or reaches a terminal state.
     /// </summary>
     public bool RetryAllowed { get; set; } = false;
 

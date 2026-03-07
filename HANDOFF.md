@@ -1039,44 +1039,40 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-03-07
+**Date:** 2026-03-08
 
 **Completed this session:**
-- Kept OTP single-use at release time while adding safe retry support for interrupted prints.
-- Added retryable failed-job behavior on the backend:
-  - retryable failures can regenerate a fresh OTP
-  - non-retryable failures remain terminal
-  - completed jobs cannot regenerate OTP.
-- Added persistence support for retry eligibility in `Domain/Entities/PrintJob.cs`, `Infrastructure/Persistence/AppDbContext.cs`, and migration `20260306204750_AddRetryableFailedOtpRegeneration`.
-- Updated domain and application flow:
+- Replaced the temporary fresh-OTP retry design with the new product rule: retryable failed jobs reuse the same OTP until the job is successfully completed, expired, deleted, or marked non-retryable.
+- Finalized backend flow updates in:
   - `Domain/StateMachine/JobStateMachine.cs`
   - `Application/Commands/GenerateOtpCommand.cs`
+  - `Application/Commands/ReleaseJobCommand.cs`
   - `Application/Commands/DeviceJobStatusCommands.cs`
   - `Api/Controllers/Public/PrintJobsController.cs`
-- Updated workers:
-  - `Infrastructure/Workers/CleanupWorker.cs` now preserves files for retryable failed jobs
-  - `Infrastructure/Workers/ExpiryWorker.cs` now marks stuck released/downloading/printing jobs as retryable failed, then expires them later if they remain unresolved.
-- Added integration coverage for:
-  - retryable failed job can regenerate OTP and release again
-  - completed/non-retryable jobs cannot regenerate
-  - cleanup behavior for retryable vs non-retryable failed jobs
-  - expiry worker turning stuck released jobs into retryable failed jobs.
+  - `Domain/Entities/PrintJob.cs`
+  - `Infrastructure/Workers/CleanupWorker.cs`
+- Kept the existing retryable-failure persistence model (`RetryAllowed`) and worker behavior, but aligned it to same-OTP reuse instead of OTP regeneration.
+- Public job status now exposes `canReuseOtp` for retryable failed jobs; `otpExpiresAtUtc` is only returned while the job is still in `Paid`.
+- Added/updated integration coverage for:
+  - retryable failed job can reuse the same OTP and release again
+  - retryable failed job can reuse the same OTP even after the original 6-hour OTP expiry
+  - retryable failed job cannot generate a new OTP
+  - non-retryable/completed jobs cannot reuse the same OTP
 - Validation completed:
   - `dotnet build printnest.sln -p:UseSharedCompilation=false`
   - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj`
-  - integration baseline is now 28 passing tests.
+  - integration baseline is now 30 passing tests.
 
-**Stopped at:** Backend contract for retryable failed prints and fresh OTP regeneration is implemented and validated; Pi/backend/frontend in `PrintProject` still need to pull these changes and adapt to the new retry/status contract.
+**Stopped at:** Backend contract is now finalized for same-OTP reuse on retryable failed jobs; `PrintProject` Pi backend/frontend still need to align their failure reporting and UI messaging to this contract.
 
-**Next step:** Pull this backend update into `PrintProject`, then update the Pi backend/frontend so kiosk failure flows surface retryable status and work with regenerated OTPs.
+**Next step:** Update `PrintProject` so the Pi backend sends correct `isRetryable` failure status to `PrintNest`, and the kiosk/customer-side UI uses `canReuseOtp` instead of any regenerate-OTP flow.
 
 **Pending decisions:**
-- Whether the customer app should expose regenerate-OTP automatically on any retryable failure or only after an explicit timeout/manual acknowledgment.
-- Whether retryable failed jobs should remain bound to the original device for UI messaging purposes, even though a fresh OTP can re-release them later.
+- Whether retryable failed jobs should remain visually associated with the original device/store in the customer-facing status UI after they become reusable elsewhere.
 
 **Context notes:**
-- Backend health still verifies on `http://localhost:5000/health` after `docker compose ... --force-recreate api`.
-- Public status payload now includes `canRegenerateOtp` for customer-side polling/UI decisions.
-- Retry regeneration is allowed only if the original PDF still exists in storage.
-- Kiosk work continues in the external kiosk repo; this repo remains backend-only.
+- Backend health still verifies on `http://localhost:5000/health`.
+- Same OTP is preserved only for retryable failed jobs; it is cleared on successful completion, expiry, deletion, and non-retryable failure.
+- Retryable failed jobs may be re-released with the same OTP even after the original 6-hour OTP expiry, as long as the overall 7-day job lifetime has not expired.
+- Kiosk work continues in the external Pi repo; this repo remains backend-only.
 - `infra/.env` secrets remain local-only and must not be committed.

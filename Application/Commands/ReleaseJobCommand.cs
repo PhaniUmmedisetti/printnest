@@ -9,22 +9,21 @@ using PrintNest.Infrastructure.Persistence;
 namespace PrintNest.Application.Commands;
 
 /// <summary>
-/// Device enters OTP at kiosk → job is released to that device.
+/// Device enters OTP at kiosk and the matching job is released to that device.
 ///
 /// This is the most security-critical command in the system.
 ///
 /// Steps:
-///   1. Rate limit check: ≤6 attempts per minute across all jobs for this device
-///   2. Find job with matching OTP hash — uses constant-time comparison via Argon2id
-///   3. Validate OTP: not expired, not locked, not already consumed
-///   4. Atomically transition Paid → Released (sets AssignedDeviceId, nulls OTP)
+///   1. Rate limit check: at most 6 attempts per minute across all jobs for this device
+///   2. Find job with matching OTP hash using constant-time Argon2 verification
+///   3. Validate OTP: paid jobs use the normal 6-hour expiry; retryable failed jobs may reuse the same OTP
+///   4. Atomically transition Paid/Failed to Released and bind the job to this device
 ///   5. Issue a short-lived file token (JWT, 120s, single-use)
-///   6. Return job summary + file token
+///   6. Return job summary plus file token
 ///
 /// DOUBLE-RELEASE PREVENTION:
-///   The UPDATE uses optimistic concurrency — EF Core's concurrency token on Status.
+///   The UPDATE uses optimistic concurrency via the Status concurrency token.
 ///   If two devices submit the same OTP simultaneously, only one UPDATE succeeds.
-///   The other gets a concurrency exception → LOCK_CONFLICT.
 ///
 /// PRIVACY:
 ///   - Never reveal whether the job exists when OTP is wrong
@@ -38,9 +37,7 @@ public sealed class ReleaseJobCommand
     private readonly IAuditService _audit;
     private readonly IServiceProvider _services;
 
-    private const int MaxAttemptsPerJob = 6;
     private const int MaxAttemptsPerMinutePerDevice = 6;
-    private const int LockDurationMinutes = 30;
 
     public ReleaseJobCommand(
         AppDbContext db,
@@ -79,11 +76,10 @@ public sealed class ReleaseJobCommand
 
     public async Task<Output> ExecuteAsync(Input input)
     {
-        // ── Rate limit: per device per minute ─────────────────────
-        // Count recent release attempts from this device in the last 60 seconds
-        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        // MetaJson is stored as jsonb in Postgres. Filtering by substring on jsonb can
-        // translate to unsupported SQL operators, so we narrow in SQL first, then match in memory.
+        var now = DateTime.UtcNow;
+
+        // Count recent failed release attempts from this device in the last 60 seconds.
+        var oneMinuteAgo = now.AddMinutes(-1);
         var recentAttemptMeta = await _db.AuditEvents
             .Where(e =>
                 e.Type == AuditEventType.OtpAttemptFailed &&
@@ -93,11 +89,10 @@ public sealed class ReleaseJobCommand
             .ToListAsync();
 
         var recentAttempts = recentAttemptMeta.Count(meta => IsOtpFailureForDevice(meta, input.DeviceId));
-
         if (recentAttempts >= MaxAttemptsPerMinutePerDevice)
             throw new DomainException(ErrorCodes.OtpRateLimited, "Invalid code.", httpStatus: 429);
 
-        // Block release on hard consumable failures so the kiosk does not accept jobs it cannot print.
+        // Block release when the printer cannot physically accept the job.
         var device = await _db.Devices
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.DeviceId == input.DeviceId && d.IsActive);
@@ -111,25 +106,26 @@ public sealed class ReleaseJobCommand
                 httpStatus: 409);
         }
 
-        // ── Find a Paid job with a non-expired OTP ─────────────────
-        // We load all Paid jobs with active OTPs and check each one.
-        // This avoids leaking which job IDs exist via timing differences.
+        // Paid jobs need an unexpired OTP. Retryable failed jobs may reuse the same OTP
+        // until the overall 7-day job lifetime expires.
+        var jobLifetimeCutoff = now.AddDays(-7);
         var candidates = await _db.PrintJobs
             .Where(j =>
-                j.Status == JobStatus.Paid &&
                 j.OtpHash != null &&
-                j.OtpExpiryUtc > DateTime.UtcNow &&
-                (j.OtpLockedUntilUtc == null || j.OtpLockedUntilUtc < DateTime.UtcNow))
+                j.CreatedAtUtc > jobLifetimeCutoff &&
+                (j.Status == JobStatus.Paid || (j.Status == JobStatus.Failed && j.RetryAllowed)) &&
+                (
+                    (j.Status == JobStatus.Paid && j.OtpExpiryUtc > now) ||
+                    (j.Status == JobStatus.Failed && j.RetryAllowed)
+                ) &&
+                (j.OtpLockedUntilUtc == null || j.OtpLockedUntilUtc < now))
             .ToListAsync();
 
-        // Check each candidate — Argon2id verify is intentionally slow
         var job = candidates.FirstOrDefault(j =>
             j.OtpHash != null && _otp.Verify(input.OtpPlaintext, j.OtpHash));
 
         if (job is null)
         {
-            // Record the failed attempt in audit (no job reference since we don't know which job)
-            // We use a sentinel JobId (all zeros) for device-level failed attempts
             await _audit.RecordAsync(Guid.Empty, AuditEventType.OtpAttemptFailed, new
             {
                 deviceId = input.DeviceId,
@@ -140,30 +136,18 @@ public sealed class ReleaseJobCommand
             throw new DomainException(ErrorCodes.OtpInvalid, "Invalid code.", httpStatus: 400);
         }
 
-        // ── Assign device + store ─────────────────────────────────
         job.AssignedDeviceId = input.DeviceId;
         job.AssignedStoreId = input.StoreId;
-
-        // ── Transition: Paid → Released ───────────────────────────
-        // This call also nulls OtpHash (consumes the OTP) via JobStateMachine.ApplyEffects
         JobStateMachine.Transition(job, JobStatus.Released, actor: "device");
 
-        // ── Issue file token ──────────────────────────────────────
         var fileToken = _token.IssueFileToken(job.JobId, input.DeviceId);
 
-        // ── Audit ─────────────────────────────────────────────────
-        await _audit.RecordAsync(job.JobId, AuditEventType.OtpConsumed, new
-        {
-            deviceId = input.DeviceId,
-            storeId = input.StoreId
-        });
         await _audit.RecordAsync(job.JobId, AuditEventType.JobReleased, new
         {
             deviceId = input.DeviceId,
             storeId = input.StoreId
         });
 
-        // ── Persist (all changes atomic) ──────────────────────────
         var concurrencyHook = _services.GetService<IReleaseConcurrencyTestHook>();
         if (concurrencyHook is not null)
             await concurrencyHook.BeforeSaveAsync(job.JobId, input.DeviceId);
@@ -174,17 +158,13 @@ public sealed class ReleaseJobCommand
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Another device claimed this job between our read and write
             throw new DomainException(ErrorCodes.LockConflict, "Invalid code.", httpStatus: 409);
         }
-
-        // ── Parse options for summary ─────────────────────────────
-        var summary = ParseOptions(job);
 
         return new Output(
             job.JobId,
             job.Status.ToString(),
-            summary,
+            ParseOptions(job),
             fileToken,
             FileTokenExpiresInSeconds: 120
         );
@@ -197,8 +177,8 @@ public sealed class ReleaseJobCommand
             using var doc = System.Text.Json.JsonDocument.Parse(job.OptionsJson ?? "{}");
             var root = doc.RootElement;
             return new JobSummary(
-                Copies: root.TryGetProperty("copies", out var c) ? c.GetInt32() : 1,
-                Color: root.TryGetProperty("color", out var col) ? col.GetString() ?? "BW" : "BW",
+                Copies: root.TryGetProperty("copies", out var copies) ? copies.GetInt32() : 1,
+                Color: root.TryGetProperty("color", out var color) ? color.GetString() ?? "BW" : "BW",
                 PriceCents: job.PriceCents,
                 Currency: job.Currency
             );
