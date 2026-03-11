@@ -55,6 +55,13 @@ public sealed class GenerateOtpCommand
                 httpStatus: 409
             );
 
+        if (string.IsNullOrWhiteSpace(job.ObjectKey))
+            throw new DomainException(
+                ErrorCodes.StorageError,
+                "Job file is unavailable. Upload must be finalized before OTP generation.",
+                httpStatus: 409
+            );
+
         // Generate initial OTP for the paid job.
         var result = _otp.Generate();
         var expiresAt = DateTime.UtcNow.Add(OtpValidity);

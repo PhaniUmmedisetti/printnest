@@ -136,6 +136,13 @@ public sealed class ReleaseJobCommand
             throw new DomainException(ErrorCodes.OtpInvalid, "Invalid code.", httpStatus: 400);
         }
 
+        if (string.IsNullOrWhiteSpace(job.ObjectKey))
+            throw new DomainException(
+                ErrorCodes.StorageError,
+                "Job file is unavailable for release.",
+                httpStatus: 409
+            );
+
         job.AssignedDeviceId = input.DeviceId;
         job.AssignedStoreId = input.StoreId;
         JobStateMachine.Transition(job, JobStatus.Released, actor: "device");

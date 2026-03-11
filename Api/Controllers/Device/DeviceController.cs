@@ -219,6 +219,13 @@ public sealed class DeviceController : ControllerBase
         if (job.Status != Domain.Enums.JobStatus.Released)
             throw new DomainException(ErrorCodes.JobStateInvalid, "Job is no longer in a downloadable state.", httpStatus: 409);
 
+        if (string.IsNullOrWhiteSpace(job.ObjectKey))
+            throw new DomainException(
+                ErrorCodes.StorageError,
+                "Job file is unavailable for download.",
+                httpStatus: 409
+            );
+
         // ── Consume JTI + transition to Downloading (atomic) ─────
         _db.UsedFileTokens.Add(new UsedFileToken
         {

@@ -1039,40 +1039,31 @@ Currency is always INR. "Cents" in field names means paise (1/100 of a rupee).
 
 ## CURRENT BOOKMARK
 
-**Date:** 2026-03-08
+**Date:** 2026-03-12
 
 **Completed this session:**
-- Replaced the temporary fresh-OTP retry design with the new product rule: retryable failed jobs reuse the same OTP until the job is successfully completed, expired, deleted, or marked non-retryable.
-- Finalized backend flow updates in:
-  - `Domain/StateMachine/JobStateMachine.cs`
-  - `Application/Commands/GenerateOtpCommand.cs`
-  - `Application/Commands/ReleaseJobCommand.cs`
-  - `Application/Commands/DeviceJobStatusCommands.cs`
-  - `Api/Controllers/Public/PrintJobsController.cs`
-  - `Domain/Entities/PrintJob.cs`
-  - `Infrastructure/Workers/CleanupWorker.cs`
-- Kept the existing retryable-failure persistence model (`RetryAllowed`) and worker behavior, but aligned it to same-OTP reuse instead of OTP regeneration.
-- Public job status now exposes `canReuseOtp` for retryable failed jobs; `otpExpiresAtUtc` is only returned while the job is still in `Paid`.
-- Added/updated integration coverage for:
-  - retryable failed job can reuse the same OTP and release again
-  - retryable failed job can reuse the same OTP even after the original 6-hour OTP expiry
-  - retryable failed job cannot generate a new OTP
-  - non-retryable/completed jobs cannot reuse the same OTP
+- Reproduced the malformed-job path caused by a locally seeded OTP-only test job with `object_key = null`, which released successfully and then crashed `/api/v1/device/printjobs/{jobId}/file` with `STORAGE_ERROR` during streaming.
+- Hardened backend guardrails so malformed jobs fail before storage streaming:
+  - `Application/Commands/GenerateOtpCommand.cs` now rejects OTP generation when `ObjectKey` is missing.
+  - `Application/Commands/ReleaseJobCommand.cs` now rejects release when `ObjectKey` is missing.
+  - `Api/Controllers/Device/DeviceController.cs` now rejects download before consuming the file token or transitioning to `Downloading` when `ObjectKey` is missing.
+- Added integration coverage for:
+  - paid job without `ObjectKey` cannot be released
+  - released job without `ObjectKey` cannot be downloaded and remains `Released`
+
+**Stopped at:** Missing-`ObjectKey` guardrail patch is complete and validated in `GenerateOtpCommand`, `ReleaseJobCommand`, `DeviceController`, and `tests/PrintNest.IntegrationTests/Phase3IntegrationTests.cs`.
+
+**Next step:** Align the external Pi repo to surface the clean conflict response as a retryable download failure instead of an internal-server-error screen.
+
+**Pending decisions:**
+- Whether Pi/kiosk UX should show a specialized message for backend file-unavailable errors, or continue grouping them under the generic retryable download-failed screen.
+
+**Context notes:**
+- The triggering job `12c3b228-c67b-41b9-a502-7625fdeb2be4` was a synthetic local test row inserted directly into Postgres for OTP testing; it bypassed the normal upload/finalize flow and therefore had no `ObjectKey`.
+- Backend health still verifies on `http://localhost:5000/health`.
 - Validation completed:
   - `dotnet build printnest.sln -p:UseSharedCompilation=false`
   - `dotnet test tests/PrintNest.IntegrationTests/PrintNest.IntegrationTests.csproj`
-  - integration baseline is now 30 passing tests.
-
-**Stopped at:** Backend contract is now finalized for same-OTP reuse on retryable failed jobs; `PrintProject` Pi backend/frontend still need to align their failure reporting and UI messaging to this contract.
-
-**Next step:** Update `PrintProject` so the Pi backend sends correct `isRetryable` failure status to `PrintNest`, and the kiosk/customer-side UI uses `canReuseOtp` instead of any regenerate-OTP flow.
-
-**Pending decisions:**
-- Whether retryable failed jobs should remain visually associated with the original device/store in the customer-facing status UI after they become reusable elsewhere.
-
-**Context notes:**
-- Backend health still verifies on `http://localhost:5000/health`.
-- Same OTP is preserved only for retryable failed jobs; it is cleared on successful completion, expiry, deletion, and non-retryable failure.
-- Retryable failed jobs may be re-released with the same OTP even after the original 6-hour OTP expiry, as long as the overall 7-day job lifetime has not expired.
+  - integration baseline is now 32 passing tests.
 - Kiosk work continues in the external Pi repo; this repo remains backend-only.
 - `infra/.env` secrets remain local-only and must not be committed.

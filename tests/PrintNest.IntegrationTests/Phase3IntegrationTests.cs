@@ -99,6 +99,65 @@ public sealed class Phase3IntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task Paid_Job_Without_ObjectKey_Cannot_Be_Released()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+
+        await UpdateJobAsync(factory.Services, job.JobId, j =>
+        {
+            j.ObjectKey = null;
+            return Task.CompletedTask;
+        });
+
+        using var releaseRequest = ApiFlowHelpers.CreateSignedJsonRequest(
+            HttpMethod.Post,
+            "/api/v1/device/release",
+            device.DeviceId,
+            device.SharedSecret,
+            new { otp = job.Otp, storeId = device.StoreId });
+        using var releaseResponse = await client.SendAsync(releaseRequest);
+
+        releaseResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(releaseResponse)).Should().Be(ErrorCodes.StorageError);
+        (await GetJobStatusFromDbAsync(factory.Services, job.JobId)).Should().Be(JobStatus.Paid);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Released_Job_Without_ObjectKey_Cannot_Be_Downloaded()
+    {
+        using var factory = _fixture.CreateFactory();
+        using var client = factory.CreateClient();
+
+        var device = await ApiFlowHelpers.RegisterStoreAndDeviceAsync(client, _fixture.AdminApiKey);
+        var job = await ApiFlowHelpers.CreatePaidJobWithOtpAsync(client);
+        var release = await ApiFlowHelpers.ReleaseByOtpAsync(client, device, job.Otp);
+
+        await UpdateJobAsync(factory.Services, job.JobId, j =>
+        {
+            j.ObjectKey = null;
+            return Task.CompletedTask;
+        });
+
+        using var downloadRequest = ApiFlowHelpers.CreateSignedRequest(
+            HttpMethod.Get,
+            $"/api/v1/device/printjobs/{job.JobId}/file",
+            device.DeviceId,
+            device.SharedSecret,
+            release.FileToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+
+        downloadResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ApiFlowHelpers.GetErrorCodeAsync(downloadResponse)).Should().Be(ErrorCodes.StorageError);
+        (await GetJobStatusFromDbAsync(factory.Services, job.JobId)).Should().Be(JobStatus.Released);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task Retryable_Failed_Job_Can_Reuse_Same_Otp_And_Release_Again()
     {
         using var factory = _fixture.CreateFactory();
