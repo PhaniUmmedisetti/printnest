@@ -77,6 +77,10 @@ public sealed class AppDbContext : DbContext
             e.Property(x => x.AssignedStoreId).HasColumnName("assigned_store_id").HasMaxLength(128);
             e.Property(x => x.ReleaseLockUtc).HasColumnName("release_lock_utc");
 
+            // Last failure details — set by device or watchdog, cleared on retry/completion
+            e.Property(x => x.LastFailureCode).HasColumnName("last_failure_code").HasMaxLength(64);
+            e.Property(x => x.LastFailureMessage).HasColumnName("last_failure_message").HasMaxLength(512);
+
             // Completion / deletion
             e.Property(x => x.PrintedAtUtc).HasColumnName("printed_at_utc");
             e.Property(x => x.RetryAllowed).HasColumnName("retry_allowed").HasDefaultValue(false);

@@ -167,6 +167,8 @@ public sealed class FailJobCommand
 
         JobStateMachine.Transition(job, JobStatus.Failed, actor: "device");
         job.RetryAllowed = input.IsRetryable;
+        job.LastFailureCode = input.FailureCode;
+        job.LastFailureMessage = input.FailureMessage;
         if (!input.IsRetryable)
         {
             job.OtpHash = null;

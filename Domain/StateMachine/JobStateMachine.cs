@@ -181,6 +181,9 @@ public static class JobStateMachine
                 job.OtpAttempts = 0;
                 job.OtpLockedUntilUtc = null;
                 job.RetryAllowed = false;
+                // Clear any previous failure details — customer is retrying
+                job.LastFailureCode = null;
+                job.LastFailureMessage = null;
                 break;
 
             case JobStatus.Expired:
@@ -200,6 +203,8 @@ public static class JobStateMachine
                 job.OtpAttempts = 0;
                 job.OtpLockedUntilUtc = null;
                 job.RetryAllowed = false;
+                job.LastFailureCode = null;
+                job.LastFailureMessage = null;
                 job.PrintedAtUtc = DateTime.UtcNow;
                 break;
 

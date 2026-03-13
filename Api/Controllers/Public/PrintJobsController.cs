@@ -145,6 +145,7 @@ public sealed class PrintJobsController : ControllerBase
         if (job is null)
             throw new DomainException(ErrorCodes.JobNotFound, "Job not found.", httpStatus: 404);
 
+        var isFailed = job.Status == Domain.Enums.JobStatus.Failed;
         return Ok(new
         {
             jobId = job.JobId,
@@ -152,7 +153,8 @@ public sealed class PrintJobsController : ControllerBase
             priceCents = job.PriceCents,
             currency = job.Currency,
             otpExpiresAtUtc = job.Status == Domain.Enums.JobStatus.Paid ? job.OtpExpiryUtc : null,
-            canReuseOtp = job.Status == Domain.Enums.JobStatus.Failed && job.RetryAllowed && job.OtpHash != null,
+            canReuseOtp = isFailed && job.RetryAllowed && job.OtpHash != null,
+            failure = isFailed ? new { code = job.LastFailureCode, message = job.LastFailureMessage } : null,
             assignedStoreId = job.AssignedStoreId,
             createdAtUtc = job.CreatedAtUtc,
             updatedAtUtc = job.UpdatedAtUtc

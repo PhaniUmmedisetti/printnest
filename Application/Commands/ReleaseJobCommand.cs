@@ -113,7 +113,6 @@ public sealed class ReleaseJobCommand
             .Where(j =>
                 j.OtpHash != null &&
                 j.CreatedAtUtc > jobLifetimeCutoff &&
-                (j.Status == JobStatus.Paid || (j.Status == JobStatus.Failed && j.RetryAllowed)) &&
                 (
                     (j.Status == JobStatus.Paid && j.OtpExpiryUtc > now) ||
                     (j.Status == JobStatus.Failed && j.RetryAllowed)

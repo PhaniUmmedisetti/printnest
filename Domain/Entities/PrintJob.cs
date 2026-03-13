@@ -71,6 +71,22 @@ public sealed class PrintJob
     /// <summary>Timestamp when the release lock was acquired. Used for audit and stuck-job detection.</summary>
     public DateTime? ReleaseLockUtc { get; set; }
 
+    // ── Failure details (last failure only) ──────────────────────
+
+    /// <summary>
+    /// Short code identifying why the job last failed.
+    /// Set by the device (e.g. "PAPER_OUT", "PAPER_JAM", "CUPS_ERROR") or by the
+    /// watchdog worker (e.g. "WATCHDOG_TIMEOUT").
+    /// Cleared when the job is released for retry or completes successfully.
+    /// </summary>
+    public string? LastFailureCode { get; set; }
+
+    /// <summary>
+    /// Human-readable failure description, forwarded from the device or worker.
+    /// Cleared alongside LastFailureCode.
+    /// </summary>
+    public string? LastFailureMessage { get; set; }
+
     // ── Completion / deletion fields ──────────────────────────────
 
     /// <summary>Timestamp when the device confirmed print completed.</summary>

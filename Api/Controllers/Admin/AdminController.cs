@@ -146,7 +146,7 @@ public sealed class AdminController : ControllerBase
             d.IsActive,
             d.LastHeartbeatUtc,
             d.CreatedAtUtc,
-            isOnline = d.LastHeartbeatUtc != null && d.LastHeartbeatUtc > now.AddMinutes(-2),
+            isOnline = IsDeviceOnline(d, now),
             printerHealth = new
             {
                 d.PrinterModel,
@@ -398,7 +398,7 @@ public sealed class AdminController : ControllerBase
     private static IReadOnlyList<DeviceAlert> BuildAlerts(Device device, DateTime nowUtc, IReadOnlyList<PrintJob> jobs)
     {
         var alerts = new List<DeviceAlert>();
-        var isDeviceOnline = device.LastHeartbeatUtc != null && device.LastHeartbeatUtc > nowUtc.AddMinutes(-2);
+        var isDeviceOnline = IsDeviceOnline(device, nowUtc);
         var inkPrediction = BuildInkPrediction(device, nowUtc);
 
         if (!isDeviceOnline)

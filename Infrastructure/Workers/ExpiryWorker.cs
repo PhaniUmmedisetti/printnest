@@ -110,6 +110,8 @@ public sealed class ExpiryWorker : BackgroundService
             {
                 JobStateMachine.Transition(job, JobStatus.Failed, actor: "worker");
                 job.RetryAllowed = true;
+                job.LastFailureCode = "WATCHDOG_TIMEOUT";
+                job.LastFailureMessage = "Print was interrupted before the file could be downloaded. You can retry with the same code.";
                 db.AuditEvents.Add(new Domain.Entities.AuditEvent
                 {
                     JobId = job.JobId,
@@ -139,6 +141,8 @@ public sealed class ExpiryWorker : BackgroundService
                 var stuckInStatus = job.Status;
                 JobStateMachine.Transition(job, JobStatus.Failed, actor: "worker");
                 job.RetryAllowed = true;
+                job.LastFailureCode = "WATCHDOG_TIMEOUT";
+                job.LastFailureMessage = $"Print was interrupted while the job was {stuckInStatus}. You can retry with the same code.";
                 db.AuditEvents.Add(new Domain.Entities.AuditEvent
                 {
                     JobId = job.JobId,
