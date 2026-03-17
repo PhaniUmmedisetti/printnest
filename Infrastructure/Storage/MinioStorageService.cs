@@ -47,7 +47,7 @@ public sealed class MinioStorageService : IStorageService
     /// <summary>
     /// Generates a presigned PUT URL. Client uploads directly to MinIO — never through this API.
     /// </summary>
-    public async Task<string> GeneratePresignedUploadUrlAsync(string objectKey, int expiresInSeconds = 900)
+    public Task<string> GeneratePresignedUploadUrlAsync(string objectKey, int expiresInSeconds = 900)
     {
         try
         {
@@ -61,7 +61,7 @@ public sealed class MinioStorageService : IStorageService
             };
 
             // AWS SDK GetPreSignedURL is synchronous
-            return await Task.FromResult(_s3.GetPreSignedURL(request));
+            return Task.FromResult(_s3.GetPreSignedURL(request));
         }
         catch (Exception ex)
         {

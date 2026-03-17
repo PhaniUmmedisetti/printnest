@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.StateMachine;
 using PrintNest.Infrastructure.Persistence;
+using System.Text.Json;
 
 namespace PrintNest.Infrastructure.Workers;
 
@@ -147,7 +148,7 @@ public sealed class ExpiryWorker : BackgroundService
                 {
                     JobId = job.JobId,
                     Type = AuditEventType.JobFailed,
-                    MetaJson = $"{{\"reason\":\"watchdog_timeout\",\"stuckInStatus\":\"{stuckInStatus}\",\"isRetryable\":true}}",
+                    MetaJson = JsonSerializer.Serialize(new { reason = "watchdog_timeout", stuckInStatus = stuckInStatus.ToString(), isRetryable = true }),
                     CreatedAtUtc = now
                 });
                 _logger.LogWarning("[ExpiryWorker] Job {JobId} failed (watchdog timeout in {Status}).",
@@ -203,7 +204,7 @@ public sealed class ExpiryWorker : BackgroundService
                 {
                     JobId = job.JobId,
                     Type = AuditEventType.JobExpired,
-                    MetaJson = $"{{\"reason\":\"abandoned_pre_payment\",\"stuckInStatus\":\"{job.Status}\"}}",
+                    MetaJson = JsonSerializer.Serialize(new { reason = "abandoned_pre_payment", stuckInStatus = job.Status.ToString() }),
                     CreatedAtUtc = now
                 });
                 _logger.LogInformation("[ExpiryWorker] Job {JobId} expired (abandoned in {Status} after 24h).",

@@ -7,6 +7,7 @@ using PrintNest.Domain.Enums;
 using PrintNest.Domain.Errors;
 using PrintNest.Infrastructure.Persistence;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace PrintNest.Api.Controllers.Admin;
 
@@ -83,7 +84,7 @@ public sealed class AdminController : ControllerBase
         {
             JobId = Guid.Empty,
             Type = Domain.Enums.AuditEventType.DeviceRegistered,
-            MetaJson = $"{{\"deviceId\":\"{req.DeviceId}\",\"storeId\":\"{req.StoreId}\"}}",
+            MetaJson = JsonSerializer.Serialize(new { deviceId = req.DeviceId, storeId = req.StoreId ?? string.Empty }),
             CreatedAtUtc = DateTime.UtcNow
         });
 
@@ -117,7 +118,7 @@ public sealed class AdminController : ControllerBase
         {
             JobId = Guid.Empty,
             Type = Domain.Enums.AuditEventType.DeviceDeactivated,
-            MetaJson = $"{{\"deviceId\":\"{deviceId}\"}}",
+            MetaJson = JsonSerializer.Serialize(new { deviceId }),
             CreatedAtUtc = DateTime.UtcNow
         });
 
@@ -270,7 +271,7 @@ public sealed class AdminController : ControllerBase
         {
             JobId = Guid.Empty,
             Type = Domain.Enums.AuditEventType.StoreCreated,
-            MetaJson = $"{{\"storeId\":\"{req.StoreId}\",\"name\":\"{req.Name}\"}}",
+            MetaJson = JsonSerializer.Serialize(new { storeId = req.StoreId, name = req.Name }),
             CreatedAtUtc = DateTime.UtcNow
         });
 

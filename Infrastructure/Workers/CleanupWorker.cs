@@ -6,6 +6,7 @@ using PrintNest.Application.Interfaces;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.StateMachine;
 using PrintNest.Infrastructure.Persistence;
+using System.Text.Json;
 
 namespace PrintNest.Infrastructure.Workers;
 
@@ -109,7 +110,7 @@ public sealed class CleanupWorker : BackgroundService
                 {
                     JobId = job.JobId,
                     Type = AuditEventType.FileDeleteFailed,
-                    MetaJson = $"{{\"error\":\"{ex.Message.Replace("\"", "\\\"")}\"}}",
+                    MetaJson = JsonSerializer.Serialize(new { error = ex.Message }),
                     CreatedAtUtc = now
                 });
 

@@ -397,40 +397,19 @@ public sealed class DeviceController : ControllerBase
         device.PrinterLowToEmptySamples = samples + 1;
     }
 
-    private static string NormalizePrinterConnectionState(string? state)
-    {
-        if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
-        return state.Trim().ToUpperInvariant() switch
-        {
-            "ONLINE" => "ONLINE",
-            "OFFLINE" => "OFFLINE",
-            _ => "UNKNOWN"
-        };
-    }
+    private static readonly string[] ConnectionStates   = ["ONLINE", "OFFLINE"];
+    private static readonly string[] OperationalStates  = ["IDLE", "PRINTING", "ERROR"];
+    private static readonly string[] InkStates          = ["OK", "LOW", "VERY_LOW", "EMPTY"];
 
-    private static string NormalizePrinterOperationalState(string? state)
-    {
-        if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
-        return state.Trim().ToUpperInvariant() switch
-        {
-            "IDLE" => "IDLE",
-            "PRINTING" => "PRINTING",
-            "ERROR" => "ERROR",
-            _ => "UNKNOWN"
-        };
-    }
+    private static string NormalizePrinterConnectionState(string? state)  => NormalizePrinterState(state, ConnectionStates);
+    private static string NormalizePrinterOperationalState(string? state) => NormalizePrinterState(state, OperationalStates);
+    private static string NormalizePrinterInkState(string? state)         => NormalizePrinterState(state, InkStates);
 
-    private static string NormalizePrinterInkState(string? state)
+    private static string NormalizePrinterState(string? state, string[] allowed)
     {
         if (string.IsNullOrWhiteSpace(state)) return "UNKNOWN";
-        return state.Trim().ToUpperInvariant() switch
-        {
-            "OK" => "OK",
-            "LOW" => "LOW",
-            "VERY_LOW" => "VERY_LOW",
-            "EMPTY" => "EMPTY",
-            _ => "UNKNOWN"
-        };
+        var normalized = state.Trim().ToUpperInvariant();
+        return Array.IndexOf(allowed, normalized) >= 0 ? normalized : "UNKNOWN";
     }
 }
 
