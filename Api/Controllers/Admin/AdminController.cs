@@ -161,7 +161,7 @@ public sealed class AdminController : ControllerBase
                 d.PrinterStatusUpdatedAtUtc,
                 inkPrediction = BuildInkPrediction(d, now)
             },
-            alerts = BuildAlerts(d, now, jobsByDevice.GetValueOrDefault(d.DeviceId) ?? [])
+            alerts = BuildAlerts(d, now, jobsByDevice[d.DeviceId])
                 .Select(a => ToAlertResponse(d, a, now))
             // Never return SharedSecret in list endpoint
         });
@@ -397,7 +397,7 @@ public sealed class AdminController : ControllerBase
 
     private sealed record OpsSnapshot(DateTime GeneratedAtUtc, List<Device> Devices, List<OpsAlertResponse> Alerts);
 
-    private static IReadOnlyList<DeviceAlert> BuildAlerts(Device device, DateTime nowUtc, IReadOnlyList<PrintJob> jobs)
+    private static IReadOnlyList<DeviceAlert> BuildAlerts(Device device, DateTime nowUtc, IEnumerable<PrintJob> jobs)
     {
         var alerts = new List<DeviceAlert>();
         var isDeviceOnline = IsDeviceOnline(device, nowUtc);
@@ -758,26 +758,24 @@ public sealed class AdminController : ControllerBase
         var jobsByDevice = await LoadJobsByDeviceAsync(devices);
 
         var alerts = devices
-            .SelectMany(d => BuildAlerts(d, now, jobsByDevice.GetValueOrDefault(d.DeviceId) ?? [])
+            .SelectMany(d => BuildAlerts(d, now, jobsByDevice[d.DeviceId])
                 .Select(a => ToAlertResponse(d, a, now)))
             .ToList();
 
         return new OpsSnapshot(now, devices, alerts);
     }
 
-    private async Task<Dictionary<string, List<PrintJob>>> LoadJobsByDeviceAsync(IReadOnlyCollection<Device> devices)
+    private async Task<ILookup<string, PrintJob>> LoadJobsByDeviceAsync(IReadOnlyCollection<Device> devices)
     {
-        var deviceIds = devices.Select(d => d.DeviceId).Distinct().ToArray();
-        if (deviceIds.Length == 0)
-            return new Dictionary<string, List<PrintJob>>(StringComparer.Ordinal);
+        var deviceIds = devices.Select(d => d.DeviceId).ToHashSet(StringComparer.Ordinal);
+        if (deviceIds.Count == 0)
+            return Array.Empty<PrintJob>().ToLookup(j => j.AssignedDeviceId!, StringComparer.Ordinal);
 
         var jobs = await _db.PrintJobs.AsNoTracking()
             .Where(j => j.AssignedDeviceId != null && deviceIds.Contains(j.AssignedDeviceId))
             .ToListAsync();
 
-        return jobs
-            .GroupBy(j => j.AssignedDeviceId!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        return jobs.ToLookup(j => j.AssignedDeviceId!, StringComparer.Ordinal);
     }
 
     private AuthenticatedStaffContext GetAuthenticatedStaff()
