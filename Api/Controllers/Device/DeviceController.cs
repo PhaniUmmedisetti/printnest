@@ -346,11 +346,8 @@ public sealed class DeviceController : ControllerBase
         return currentSince ?? nowUtc;
     }
 
-    private static bool IsLowFamily(string? inkState)
-    {
-        return string.Equals(inkState, "LOW", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(inkState, "VERY_LOW", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsLowFamily(string? inkState) =>
+        inkState?.ToUpperInvariant() is "LOW" or "VERY_LOW";
 
     private static void UpdateConnectionFlappingWindow(Device device, string? previousConnectionState, DateTime nowUtc)
     {
@@ -371,18 +368,15 @@ public sealed class DeviceController : ControllerBase
             device.PrinterConnectionFlapTransitions += 1;
     }
 
-    private static bool IsConnectionState(string? state)
-    {
-        return string.Equals(state, "ONLINE", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(state, "OFFLINE", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsConnectionState(string? state) =>
+        state?.ToUpperInvariant() is "ONLINE" or "OFFLINE";
 
     private static void UpdateLowToEmptyBaseline(Device device, DateTime nowUtc)
     {
-        if (device.PrinterInkLowSinceUtc is null)
+        if (device.PrinterInkLowSinceUtc is not { } lowSince)
             return;
 
-        var elapsedMinutes = (nowUtc - device.PrinterInkLowSinceUtc.Value).TotalMinutes;
+        var elapsedMinutes = (nowUtc - lowSince).TotalMinutes;
         if (elapsedMinutes <= 0)
             return;
 

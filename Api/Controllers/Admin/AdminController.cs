@@ -6,6 +6,7 @@ using PrintNest.Domain.Entities;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.Errors;
 using PrintNest.Infrastructure.Persistence;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -792,17 +793,15 @@ public sealed class AdminController : ControllerBase
     }
 
     private static IQueryable<Device> ApplyStoreScope(IQueryable<Device> query, AuthenticatedStaffContext staff)
-    {
-        if (string.Equals(staff.Role, StaffRoles.SuperAdmin, StringComparison.Ordinal))
-            return query;
-
-        if (string.IsNullOrWhiteSpace(staff.StoreId))
-            return query.Where(_ => false);
-
-        return query.Where(d => d.StoreId == staff.StoreId);
-    }
+        => ApplyStoreScopeCore(query, staff, e => e.StoreId);
 
     private static IQueryable<Store> ApplyStoreScope(IQueryable<Store> query, AuthenticatedStaffContext staff)
+        => ApplyStoreScopeCore(query, staff, e => e.StoreId);
+
+    private static IQueryable<T> ApplyStoreScopeCore<T>(
+        IQueryable<T> query,
+        AuthenticatedStaffContext staff,
+        Expression<Func<T, string?>> storeIdSelector)
     {
         if (string.Equals(staff.Role, StaffRoles.SuperAdmin, StringComparison.Ordinal))
             return query;
@@ -810,7 +809,9 @@ public sealed class AdminController : ControllerBase
         if (string.IsNullOrWhiteSpace(staff.StoreId))
             return query.Where(_ => false);
 
-        return query.Where(s => s.StoreId == staff.StoreId);
+        var param = storeIdSelector.Parameters[0];
+        var body = Expression.Equal(storeIdSelector.Body, Expression.Constant(staff.StoreId, typeof(string)));
+        return query.Where(Expression.Lambda<Func<T, bool>>(body, param));
     }
 }
 

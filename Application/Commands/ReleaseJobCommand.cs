@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PrintNest.Application.Interfaces;
+using System.Text.Json;
 using PrintNest.Domain.Enums;
 using PrintNest.Domain.Errors;
 using PrintNest.Domain.StateMachine;
@@ -189,7 +190,7 @@ public sealed class ReleaseJobCommand
                 Currency: job.Currency
             );
         }
-        catch
+        catch (Exception)
         {
             return new JobSummary(1, "BW", job.PriceCents, job.Currency);
         }
@@ -205,7 +206,7 @@ public sealed class ReleaseJobCommand
 
             return string.Equals(did.GetString(), deviceId, StringComparison.Ordinal);
         }
-        catch
+        catch (JsonException)
         {
             return false;
         }

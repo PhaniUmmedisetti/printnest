@@ -40,7 +40,7 @@ public sealed class MinioStorageService : IStorageService
         {
             ServiceURL = endpoint,
             ForcePathStyle = true, // required for MinIO — virtual-hosted style not supported
-            UseHttp = !bool.Parse(config["Storage:UseHttps"] ?? "false")
+            UseHttp = !(bool.TryParse(config["Storage:UseHttps"], out var useHttps) && useHttps)
         });
     }
 
